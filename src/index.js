@@ -4,6 +4,7 @@ import { startDatabase } from './services/database/mongo.js'
 import { startMessageHandler } from './handlers/messageHandler.js'
 import 'dotenv/config'
 
+
 const botStatus = { value: "INICIANDO..." }
 
 async function startApp() {
