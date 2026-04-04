@@ -75,6 +75,7 @@ export default {
 ⪼ .abrir        » Abrir grupo
 ⪼ .kick @      » Expulsar
 ⪼ .welcome on/off » Bienvenida
+⪼ .antilink on/off» AntiLink
 ⪼ .modoadmin   » Solo admins
 ┗━━━━━━━━━━━━━━━━━━┛
 

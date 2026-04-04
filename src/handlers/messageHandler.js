@@ -1,9 +1,10 @@
 import fs from 'fs'
 import path from 'path'
+import { antiLink } from '../events/antiLink.js'
 
 const commands = new Map()
 
-// 🔥 cargar comandos (VERSIÓN PRO + SEGURA)
+// 🔥 cargar comandos
 const loadCommands = async () => {
   const files = fs.readdirSync('./src/commands')
 
@@ -11,7 +12,6 @@ const loadCommands = async () => {
     try {
       const cmd = await import(`../commands/${file}`)
 
-      // 🚨 validar comando
       if (!cmd.default || !cmd.default.name) {
         console.log(`❌ Comando inválido: ${file}`)
         continue
@@ -26,21 +26,20 @@ const loadCommands = async () => {
   }
 }
 
-export function startMessageHandler(sock) {
+export async function startMessageHandler(sock) {
 
   console.log('🧠 Handler cargado')
 
-  // 🔥 cargar comandos correctamente
-  loadCommands()
+  await loadCommands()
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    if (!messages?.length) return
 
     const msg = messages[0]
     if (!msg.message) return
     if (msg.key.fromMe) return
 
-    // 🧠 obtener texto universal
+    // 🧠 texto universal
     const getText = (msg) => {
       const m = msg.message
       return (
@@ -56,7 +55,17 @@ export function startMessageHandler(sock) {
 
     const text = getText(msg)
     const from = msg.key.remoteJid
+    const isGroup = from.endsWith('@g.us')
 
+    // 🔥 ANTI-LINK (SE EJECUTA SIEMPRE)
+    if (isGroup) {
+      await antiLink(sock, msg, text, from)
+    }
+
+    // 🚫 si no hay texto, salir
+    if (!text) return
+
+    // 🔥 COMANDOS
     if (!text.startsWith('.')) return
 
     const args = text.slice(1).trim().split(/ +/)
@@ -74,6 +83,6 @@ export function startMessageHandler(sock) {
     } catch (err) {
       console.error(`❌ Error en comando ${commandName}:`, err)
     }
+
   })
 }
-
