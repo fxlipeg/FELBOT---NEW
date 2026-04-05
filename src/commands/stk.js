@@ -1,5 +1,19 @@
-import { createCanvas } from 'canvas'
+import { createCanvas, registerFont } from 'canvas'
 import { Sticker, StickerTypes } from 'wa-sticker-formatter'
+import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'path'
+
+// 📌 ruta segura
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// 🎨 font
+registerFont(
+  resolve(__dirname, '../utils/Happyweek/Happyweek.otf'),
+  {
+    family: 'Happyweek'
+  }
+)
 
 export default {
   name: "stk",
@@ -10,7 +24,7 @@ export default {
 
       if (!args.length) {
         return sock.sendMessage(from, {
-          text: "❌ Usa: .stk <texto>\nEjemplo: .stk rojo hola\nEjemplo: .stk !negro blanco hola"
+          text: "❌ Usa: .stk <texto>\nEjemplo: .stk hola\nEjemplo: .stk rojo hola mundo"
         }, { quoted: msg })
       }
 
@@ -38,7 +52,7 @@ export default {
       let colorTexto = 'negro'
       let colorFondo = 'blanco'
 
-      // 🎯 detectar fondo (!color)
+      // 🎯 fondo (!color)
       if (palabras[0]?.startsWith('!')) {
         const fondo = palabras[0].slice(1).toLowerCase()
         if (colores.includes(fondo)) {
@@ -47,13 +61,17 @@ export default {
         }
       }
 
-      // 🎯 detectar color texto
+      // 🎯 color texto
       if (colores.includes(palabras[0]?.toLowerCase())) {
         colorTexto = palabras[0].toLowerCase()
         palabras.shift()
       }
 
+      // 🧠 texto final con soporte de saltos
       const contenido = (palabras.join(' ') || 'Sticker').toUpperCase()
+
+      // 📌 soporte líneas manuales
+      const lines = contenido.split('\n')
 
       // 🖼 canvas
       const canvas = createCanvas(512, 512)
@@ -63,27 +81,24 @@ export default {
       ctx.fillStyle = colorMap[colorFondo]
       ctx.fillRect(0, 0, 512, 512)
 
-      // 🔥 dividir texto
-      const words = contenido.split(' ')
-      let lines = []
-      let current = ''
+      // 🔤 font base
+      let fontSize = 90
+      ctx.font = `${fontSize}px "Happyweek"`
 
-      ctx.font = '60px "MontserratExtraBold"'
+      // 🔥 auto resize inteligente
+      while (fontSize > 20) {
+        let maxWidth = 0
 
-      for (let word of words) {
-        const test = current + ' ' + word
-        if (ctx.measureText(test).width < 460) {
-          current = test
-        } else {
-          lines.push(current.trim())
-          current = word
+        for (let line of lines) {
+          const width = ctx.measureText(line).width
+          if (width > maxWidth) maxWidth = width
         }
-      }
-      if (current) lines.push(current.trim())
 
-      // 📏 tamaño dinámico PRO
-      let fontSize = Math.min(80, Math.floor(500 / (lines.length + 1)))
-      ctx.font = `${fontSize}px "MontserratExtraBold"`
+        if (maxWidth <= 460) break
+
+        fontSize -= 2
+        ctx.font = `${fontSize}px "Happyweek"`
+      }
 
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
@@ -96,10 +111,11 @@ export default {
 
       ctx.fillStyle = colorMap[colorTexto]
 
-      // centrar
+      // 📍 centrado perfecto vertical
       const totalHeight = lines.length * fontSize * 1.2
       let y = (512 - totalHeight) / 2 + fontSize / 2
 
+      // 🖊 dibujar líneas
       for (let line of lines) {
         ctx.fillText(line, 256, y)
         y += fontSize * 1.2

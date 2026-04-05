@@ -56,9 +56,8 @@ export default {
 
       // 🖼️ mensaje bonito
       await sock.sendMessage(from, {
-        text: `╭━━━〔 📢 𝕹𝖔𝖙𝖎𝖋𝖎𝖈𝖆𝖈𝖎ó𝖓 〕━━━╮
-┃ ${text}
-╰━━━━━━━━━━━━━━━╯` + invisibleText,
+        text: `
+ ${text}` + invisibleText,
         mentions: participants,
         contextInfo: {
           externalAdReply: {

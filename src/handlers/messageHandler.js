@@ -1,5 +1,7 @@
 import fs from 'fs'
 import { antiLink } from '../events/antiLink.js'
+import { modoAdmin } from '../events/modoadmin.js' 
+import { handleReacciones } from '../events/reacciones.js'
 
 const commands = new Map()
 
@@ -49,8 +51,15 @@ export async function startMessageHandler(sock) {
     const from = msg.key.remoteJid
     const isGroup = from.endsWith('@g.us')
 
+    await handleReacciones(sock, msg, from)
+
+
+
     if (isGroup) {
       await antiLink(sock, msg, text, from)
+      const stop = await modoAdmin(sock, msg, text, from) // 👈 NUEVO
+
+      if (stop) return // 👈 BLOQUEA COMANDO
     }
 
     if (!text || !text.startsWith('.')) return

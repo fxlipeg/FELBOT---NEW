@@ -3,6 +3,9 @@ import { startServer } from './services/web/server.js'
 import { startDatabase } from './services/database/mongo.js'
 import { startMessageHandler } from './handlers/messageHandler.js'
 import { startGroupEvents } from './events/group-participants.js'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegPath from 'ffmpeg-static'
+ffmpeg.setFfmpegPath(ffmpegPath)
 import 'dotenv/config'
 
 

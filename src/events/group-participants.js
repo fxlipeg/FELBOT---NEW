@@ -53,7 +53,8 @@ ${porLink
 }
 
 ━━━━━━━━━━━━━━━━━━━
-🖤 *WELCOME TO THE FAMILY* 🖤
+*BIENVENIDO A*  ${groupName}
+*DISFRUTA TU ESTADIA* 
 `.trim()
 
         const hour = new Date().getHours()

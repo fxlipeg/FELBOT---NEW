@@ -7,6 +7,7 @@ const groupSchema = new mongoose.Schema({
   welcome: { type: Boolean, default: false },
   antilink: { type: Boolean, default: false },
   modoadmin: { type: Boolean, default: false },
+  modoadmin: { type: Boolean, default: false },
 
   // 🧠 warnings por usuario
   antilinkWarnings: {
