@@ -2,11 +2,11 @@ import Group from '../models/Group.js'
 
 export default {
   name: 'antilink',
+  groupOnly: true,
+  adminOnly: true, // 🔒 SOLO ADMINS
 
   async execute({ sock, from, msg, args }) {
     try {
-
-      if (!from.endsWith('@g.us')) return
 
       const sender = msg.key.participant || msg.key.remoteJid
       const option = args[0]?.toLowerCase()
@@ -59,7 +59,7 @@ export default {
         })
       }
 
-      // 📊 STATUS (solo si NO puso on/off)
+      // 📊 STATUS
       return sock.sendMessage(from, {
         text: `
 ╭━━━〔 𝕱𝖊𝖑𝖇𝖔𝖙++ 〕━━━╮

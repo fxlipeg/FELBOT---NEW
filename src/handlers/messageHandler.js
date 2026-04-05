@@ -1,10 +1,8 @@
 import fs from 'fs'
-import path from 'path'
 import { antiLink } from '../events/antiLink.js'
 
 const commands = new Map()
 
-// 🔥 cargar comandos
 const loadCommands = async () => {
   const files = fs.readdirSync('./src/commands')
 
@@ -12,10 +10,7 @@ const loadCommands = async () => {
     try {
       const cmd = await import(`../commands/${file}`)
 
-      if (!cmd.default || !cmd.default.name) {
-        console.log(`❌ Comando inválido: ${file}`)
-        continue
-      }
+      if (!cmd.default || !cmd.default.name) continue
 
       commands.set(cmd.default.name, cmd.default)
       console.log(`✅ Comando cargado: ${cmd.default.name}`)
@@ -29,17 +24,14 @@ const loadCommands = async () => {
 export async function startMessageHandler(sock) {
 
   console.log('🧠 Handler cargado')
-
   await loadCommands()
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     if (!messages?.length) return
 
     const msg = messages[0]
-    if (!msg.message) return
-    if (msg.key.fromMe) return
+    if (!msg.message || msg.key.fromMe) return
 
-    // 🧠 texto universal
     const getText = (msg) => {
       const m = msg.message
       return (
@@ -57,31 +49,45 @@ export async function startMessageHandler(sock) {
     const from = msg.key.remoteJid
     const isGroup = from.endsWith('@g.us')
 
-    // 🔥 ANTI-LINK (SE EJECUTA SIEMPRE)
     if (isGroup) {
       await antiLink(sock, msg, text, from)
     }
 
-    // 🚫 si no hay texto, salir
-    if (!text) return
-
-    // 🔥 COMANDOS
-    if (!text.startsWith('.')) return
+    if (!text || !text.startsWith('.')) return
 
     const args = text.slice(1).trim().split(/ +/)
     const commandName = args.shift().toLowerCase()
 
     const command = commands.get(commandName)
+    if (!command) return
 
-    if (!command) {
-      console.log(`⚠️ Comando no encontrado: ${commandName}`)
-      return
+    // 🔒 SOLO GRUPO
+    if (command.groupOnly && !isGroup) {
+      return sock.sendMessage(from, {
+        text: '❌ Este comando solo funciona en grupos.'
+      }, { quoted: msg })
+    }
+
+    // 🔒 SOLO ADMIN
+    if (command.adminOnly && isGroup) {
+      const metadata = await sock.groupMetadata(from)
+      const sender = msg.key.participant || msg.key.remoteJid
+
+      const isAdmin = metadata.participants.some(
+        p => p.id === sender && (p.admin === 'admin' || p.admin === 'superadmin')
+      )
+
+      if (!isAdmin) {
+        return sock.sendMessage(from, {
+          text: '❌ Solo los administradores pueden usar este comando.'
+        }, { quoted: msg })
+      }
     }
 
     try {
       await command.execute({ sock, from, args, msg })
     } catch (err) {
-      console.error(`❌ Error en comando ${commandName}:`, err)
+      console.error(`❌ Error en ${commandName}:`, err)
     }
 
   })

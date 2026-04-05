@@ -2,7 +2,6 @@ import Group from '../models/Group.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-// 🔥 para rutas locales en ES Modules
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -16,13 +15,7 @@ export function startGroupEvents(sock) {
       if (!['add', 'invite'].includes(anu.action)) return
 
       let group = await Group.findOne({ groupId: anu.id })
-
-      if (!group) {
-        group = await new Group({
-          groupId: anu.id,
-          welcome: true
-        }).save()
-      }
+      if (!group) return // 🔥 IMPORTANTE
 
       if (!group.welcome) return
 
@@ -34,7 +27,6 @@ export function startGroupEvents(sock) {
         const user = typeof p === 'string' ? p : p.id
         const addedBy = anu.author
 
-        // 🖼️ FOTO PERFIL O IMAGEN LOCAL
         let pp
         try {
           pp = await sock.profilePictureUrl(user, 'image')
@@ -44,7 +36,6 @@ export function startGroupEvents(sock) {
 
         const porLink = !addedBy || addedBy === user
 
-        // 💎 MENSAJE ESTILO TUYO
         const caption = `
 ┏━━━『 𝕱𝖊𝖑𝖇𝖔𝖙++ 』━━━┓
 
@@ -65,7 +56,6 @@ ${porLink
 🖤 *WELCOME TO THE FAMILY* 🖤
 `.trim()
 
-        // 🕐 HORA
         const hour = new Date().getHours()
 
         let greeting
@@ -73,7 +63,6 @@ ${porLink
         else if (hour < 18) greeting = "🌇 Good Afternoon"
         else greeting = "🌙 Good Night"
 
-        // 🎯 TARJETA
         const title = porLink
           ? "👥 Felbot++ • New Member"
           : "👑 Felbot++ • Member Added"

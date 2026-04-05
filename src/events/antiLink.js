@@ -13,7 +13,7 @@ export async function antiLink(sock, msg, text, from) {
 
     const metadata = await sock.groupMetadata(from)
 
-    // 🔥 EXCEPCIÓN ADMIN
+    // 🔥 IGNORAR ADMINS
     const isAdmin = metadata.participants.find(p => p.id === sender)?.admin
     if (isAdmin) return
 
@@ -30,6 +30,7 @@ export async function antiLink(sock, msg, text, from) {
     if (now - group.antilinkResetAt >= 86400000) {
       group.antilinkWarnings = {}
       group.antilinkResetAt = now
+      group.markModified('antilinkWarnings') // 🔥 FIX
     }
 
     if (!group.antilinkWarnings[sender]) {
@@ -38,6 +39,9 @@ export async function antiLink(sock, msg, text, from) {
 
     group.antilinkWarnings[sender]++
     const count = group.antilinkWarnings[sender]
+
+    // 🔥 ESTA ES LA CLAVE DEL FIX
+    group.markModified('antilinkWarnings')
 
     await group.save()
 
@@ -62,6 +66,7 @@ export async function antiLink(sock, msg, text, from) {
       await sock.groupParticipantsUpdate(from, [sender], 'remove')
 
       delete group.antilinkWarnings[sender]
+      group.markModified('antilinkWarnings') // 🔥 TAMBIÉN AQUÍ
       await group.save()
 
       return

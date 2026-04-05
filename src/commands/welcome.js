@@ -12,13 +12,13 @@ export default {
       sock.sendMessage(from, { text }, { quoted: msg })
 
     let group = await Group.findOne({ groupId: from })
-    if (!group) group = await new Group({ groupId: from }).save()
+    if (!group) group = await new Group({ groupId: from, welcome: false }).save()
 
     const option = args[0]?.toLowerCase()
 
     if (!option) {
       return reply(`
-┏━━━『 𝕱𝖊𝖑𝖇𝖔𝖙++ 』━━━┓
+┏━━━〔 𝕱𝖊𝖑𝖇𝖔𝖙++ 〕━━━┓
 ⚙️ Sistema de Bienvenida
 
 ▸ .welcome on
@@ -32,7 +32,7 @@ export default {
       await group.save()
 
       return reply(`
-┏━━━『 𝕱𝖊𝖑𝖇𝖔𝖙++ 』━━━┓
+┏━━━〔 𝕱𝖊𝖑𝖇𝖔𝖙++ 〕━━━┓
 ✅ 𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗔 𝗔𝗖𝗧𝗜𝗩𝗔𝗗𝗔
 
 🧠 El sistema de bienvenida
@@ -46,7 +46,7 @@ ha sido encendido correctamente.
       await group.save()
 
       return reply(`
-┏━━━『 𝕱𝖊𝖑𝖇𝖔𝖙++ 』━━━┓
+┏━━━〔 𝕱𝖊𝖑𝖇𝖔𝖙++ 〕━━━┓
 ❌ 𝗕𝗜𝗘𝗡𝗩𝗘𝗡𝗜𝗗𝗔 𝗗𝗘𝗦𝗔𝗖𝗧𝗜𝗩𝗔𝗗𝗔
 
 🧠 El sistema de bienvenida

@@ -5,6 +5,7 @@ export default {
   aliases: ['config', 'settings'],
   category: 'grupo',
   groupOnly: true,
+  adminOnly: true, // 🔥 AQUÍ
   cooldown: 5,
 
   async execute({ sock, from, msg }) {
@@ -15,16 +16,23 @@ export default {
     let group = await Group.findOne({ groupId: from })
 
     if (!group) {
-      group = await new Group({ groupId: from }).save()
+      group = await new Group({
+        groupId: from,
+        welcome: false,
+        antilink: false,
+        modoadmin: false
+      }).save()
     }
 
-    const data = group.toObject()
+    const data = {
+      welcome: group.welcome ?? false,
+      antilink: group.antilink ?? false,
+      modoadmin: group.modoadmin ?? false
+    }
 
     const nombres = {
       welcome: "👋 Bienvenida",
-
       antilink: "🔗 Anti-links",
-      
       modoadmin: "🔒 Modo Admin"
     }
 
@@ -35,8 +43,6 @@ export default {
     const orden = ['welcome', 'antilink', 'modoadmin']
 
     for (let key of orden) {
-
-      if (!(key in data)) continue
 
       total++
 
@@ -49,11 +55,10 @@ export default {
       const nombre = nombres[key] || key
 
       lista += `┃ ${estado} ${nombre}\n`
-
       lista += `┃    ↳ ${estadoTxt}\n`
     }
 
-    const porcentaje = total === 0 ? 0 : Math.floor((activos / total) * 100)
+    const porcentaje = Math.floor((activos / total) * 100)
 
     const llenos = Math.floor(porcentaje / 10)
     const barra = '▰'.repeat(llenos) + '▱'.repeat(10 - llenos)
@@ -79,6 +84,6 @@ ${lista}┃
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 `
 
-    await reply(texto)
+    await reply(texto.trim())
   }
 }
