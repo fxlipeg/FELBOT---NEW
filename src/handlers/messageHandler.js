@@ -1,7 +1,7 @@
 import fs from 'fs'
 import { antiLink } from '../events/antiLink.js'
-import { modoAdmin } from '../events/modoadmin.js' 
-import { handleReacciones } from '../events/reacciones.js'
+import { modoAdmin } from '../events/modoadmin.js'
+import { handleReaccion } from '../commands/vs.js'
 
 const commands = new Map()
 
@@ -14,8 +14,15 @@ const loadCommands = async () => {
 
       if (!cmd.default || !cmd.default.name) continue
 
-      commands.set(cmd.default.name, cmd.default)
-      console.log(`✅ Comando cargado: ${cmd.default.name}`)
+      if (Array.isArray(cmd.default.name)) {
+        for (const name of cmd.default.name) {
+          commands.set(name, cmd.default)
+          console.log(`✅ Comando cargado: ${name}`)
+        }
+      } else {
+        commands.set(cmd.default.name, cmd.default)
+        console.log(`✅ Comando cargado: ${cmd.default.name}`)
+      }
 
     } catch (err) {
       console.log(`❌ Error cargando ${file}:`, err.message)
@@ -25,7 +32,7 @@ const loadCommands = async () => {
 
 export async function startMessageHandler(sock) {
 
-  console.log('🧠 Handler cargado')
+  console.log('🧠 Handler ULTRA PRO cargado')
   await loadCommands()
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -50,16 +57,44 @@ export async function startMessageHandler(sock) {
     const text = getText(msg)
     const from = msg.key.remoteJid
     const isGroup = from.endsWith('@g.us')
+    const sender = msg.key.participant || msg.key.remoteJid
 
-    await handleReacciones(sock, msg, from)
+    const clean = (jid) => jid?.split('@')[0]
 
+    // 🔥 REACCIONES
+    await handleReaccion(sock, msg, from)
 
+    let metadata = null
+    let participants = []
+    let isAdmin = false
+    let isBotAdmin = false
+    let isOwner = false
 
     if (isGroup) {
-      await antiLink(sock, msg, text, from)
-      const stop = await modoAdmin(sock, msg, text, from) // 👈 NUEVO
+      metadata = await sock.groupMetadata(from)
+      participants = metadata.participants
 
-      if (stop) return // 👈 BLOQUEA COMANDO
+      const senderData = participants.find(p => clean(p.id) === clean(sender))
+      const botData = participants.find(p => clean(p.id) === clean(sock.user.id))
+
+      isAdmin =
+        senderData?.admin === 'admin' ||
+        senderData?.admin === 'superadmin'
+
+      isBotAdmin =
+        botData?.admin === 'admin' ||
+        botData?.admin === 'superadmin'
+    }
+
+    // 👑 OWNER (pon tu número aquí)
+    const owners = ['573001234567']
+    isOwner = owners.includes(clean(sender))
+
+    // 🔥 EVENTOS
+    if (isGroup) {
+      await antiLink(sock, msg, text, from)
+      const stop = await modoAdmin(sock, msg, text, from)
+      if (stop) return
     }
 
     if (!text || !text.startsWith('.')) return
@@ -67,36 +102,60 @@ export async function startMessageHandler(sock) {
     const args = text.slice(1).trim().split(/ +/)
     const commandName = args.shift().toLowerCase()
 
+    console.log("📩 Comando recibido:", commandName)
+
     const command = commands.get(commandName)
     if (!command) return
 
+    const reply = (txt, mentions = []) =>
+      sock.sendMessage(from, {
+        text: txt,
+        mentions
+      }, { quoted: msg })
+
     // 🔒 SOLO GRUPO
     if (command.groupOnly && !isGroup) {
-      return sock.sendMessage(from, {
-        text: '❌ Este comando solo funciona en grupos.'
-      }, { quoted: msg })
+      return reply('❌ Este comando solo funciona en grupos.')
     }
 
     // 🔒 SOLO ADMIN
-    if (command.adminOnly && isGroup) {
-      const metadata = await sock.groupMetadata(from)
-      const sender = msg.key.participant || msg.key.remoteJid
+    if (command.adminOnly && !isAdmin) {
+      return reply('❌ Solo los administradores pueden usar este comando.')
+    }
 
-      const isAdmin = metadata.participants.some(
-        p => p.id === sender && (p.admin === 'admin' || p.admin === 'superadmin')
-      )
+    // 🔒 BOT ADMIN
+    if (command.botAdmin && !isBotAdmin) {
+      return reply('❌ El bot necesita ser administrador.')
+    }
 
-      if (!isAdmin) {
-        return sock.sendMessage(from, {
-          text: '❌ Solo los administradores pueden usar este comando.'
-        }, { quoted: msg })
-      }
+    // 👑 SOLO OWNER
+    if (command.ownerOnly && !isOwner) {
+      return reply('❌ Solo el owner puede usar este comando.')
     }
 
     try {
-      await command.execute({ sock, from, args, msg })
+      await command.execute({
+        sock,
+        from,
+        args,
+        msg,
+        text,
+        command: commandName,
+
+        // 🔥 PODER TOTAL
+        isGroup,
+        isAdmin,
+        isBotAdmin,
+        isOwner,
+        participants,
+        metadata,
+        sender,
+
+        reply // 💬 respuesta rápida citando
+      })
     } catch (err) {
       console.error(`❌ Error en ${commandName}:`, err)
+      reply('❌ Error al ejecutar el comando.')
     }
 
   })
