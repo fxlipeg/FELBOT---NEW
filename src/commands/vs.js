@@ -1,15 +1,19 @@
 let partidas = {}
 
 const configs = {
-  "2vs2": { escuadra: 2, suplentes: 2, titulo: "𝟐 𝖁𝖘 𝟐 • 𝕮𝖔𝖒𝖕𝖊" },
-  "4vs4": { escuadra: 4, suplentes: 2, titulo: "𝟒 𝖁𝖘 𝟒 • 𝕮𝖔𝖒𝖕𝖊" },
-  "6vs6": { escuadra: 6, suplentes: 3, titulo: "𝟔 𝖁𝖘 𝟔 • vv2" }
+  "2vs2": { escuadra: 2, suplentes: 2, titulo: "𝟐 𝖁𝖘 𝟐 • 𝕮𝖔𝖒𝖕𝖊", tipo: "normal" },
+  "4vs4": { escuadra: 4, suplentes: 2, titulo: "𝟒 𝖁𝖘 𝟒 • 𝕮𝖔𝖒𝖕𝖊", tipo: "normal" },
+  "6vs6": { escuadra: 6, suplentes: 3, titulo: "𝟔 𝖁𝖘 𝟔 • 𝕮𝖔𝖒𝖕𝖊", tipo: "normal" },
+
+  "int2": { escuadra: 2, titulo: "𝟐 𝖁𝖘 𝟐 • *ℑ𝔫𝔱𝔢𝔯𝔫𝔞*", tipo: "interna" },
+  "int4": { escuadra: 4, titulo: "𝟒 𝖁𝖘 𝟒 • *ℑ𝔫𝔱𝔢𝔯𝔫𝔞*", tipo: "interna" },
+  "int6": { escuadra: 6, titulo: "𝟔 𝖁𝖘 𝟔 • *ℑ𝔫𝔱𝔢𝔯𝔫𝔞*", tipo: "interna" }
 }
 
 export default {
-  name: ["2vs2", "4vs4", "6vs6"],
+  name: ["2vs2", "4vs4", "6vs6", "int2", "int4", "int6"],
 
-  async execute({ sock, from, command, args }) {
+  async execute({ sock, from, command, args, msg }) {
 
     const config = configs[command]
     if (!config) return
@@ -19,16 +23,19 @@ export default {
     partidas[from] = {
       escuadra: [],
       suplentes: [],
+      equipo1: [],
+      equipo2: [],
       listaKey: null,
       config,
       hora: horaTexto
     }
 
-    const msg = await sock.sendMessage(from, {
+    const sentMsg = await sock.sendMessage(from, {
       text: generarTexto(partidas[from])
-    })
+    }, { quoted: msg })
 
-    partidas[from].listaKey = msg.key
+    // 🔥 CLAVE CORRECTA
+    partidas[from].listaKey = sentMsg.key
   }
 }
 
@@ -42,9 +49,13 @@ export async function handleReaccion(sock, msg, from) {
   if (!["❤️", "👍", "💔"].includes(emoji)) return
 
   const data = partidas[from]
-  if (!data) return
+  if (!data || !data.listaKey) return
 
-  if (!data.listaKey || reaction.key.id !== data.listaKey.id) return
+  // 🔥 VALIDACIÓN CORRECTA
+  if (
+    reaction.key.id !== data.listaKey.id ||
+    reaction.key.remoteJid !== from
+  ) return
 
   const user = msg.key.participant || msg.participant
   if (!user) return
@@ -52,89 +63,139 @@ export async function handleReaccion(sock, msg, from) {
   const botNumber = sock.user.id.split(':')[0]
   if (user.includes(botNumber)) return
 
-  const { escuadra: maxE, suplentes: maxS } = data.config
+  const { escuadra: maxE, suplentes: maxS, tipo } = data.config
 
   const estabaEscuadraLlena = data.escuadra.length === maxE
   const estabaSuplentesLlena = data.suplentes.length === maxS
+  const estabaEquipo1Lleno = data.equipo1.length === maxE
+  const estabaEquipo2Lleno = data.equipo2.length === maxE
 
   // 💔 SALIR
   if (emoji === "💔") {
     data.escuadra = data.escuadra.filter(u => u !== user)
     data.suplentes = data.suplentes.filter(u => u !== user)
-    return await actualizar(sock, from, data)
+    data.equipo1 = data.equipo1.filter(u => u !== user)
+    data.equipo2 = data.equipo2.filter(u => u !== user)
+    return actualizar(sock, from, data)
   }
 
-  // ❤️ ESCUADRA
-  if (emoji === "❤️") {
-    if (data.escuadra.length >= maxE) return
-    data.suplentes = data.suplentes.filter(u => u !== user)
-    if (!data.escuadra.includes(user)) data.escuadra.push(user)
+  // 🔵 NORMAL
+  if (tipo === "normal") {
+
+    if (emoji === "❤️") {
+      if (data.escuadra.length >= maxE) return
+      data.suplentes = data.suplentes.filter(u => u !== user)
+      if (!data.escuadra.includes(user)) data.escuadra.push(user)
+    }
+
+    if (emoji === "👍") {
+      if (data.suplentes.length >= maxS) return
+      data.escuadra = data.escuadra.filter(u => u !== user)
+      if (!data.suplentes.includes(user)) data.suplentes.push(user)
+    }
   }
 
-  // 👍 SUPLENTE
-  if (emoji === "👍") {
-    if (data.suplentes.length >= maxS) return
-    data.escuadra = data.escuadra.filter(u => u !== user)
-    if (!data.suplentes.includes(user)) data.suplentes.push(user)
+  // 🔴 INTERNA
+  if (tipo === "interna") {
+
+    if (emoji === "❤️") {
+      if (data.equipo1.length >= maxE) return
+      data.equipo2 = data.equipo2.filter(u => u !== user)
+      if (!data.equipo1.includes(user)) data.equipo1.push(user)
+    }
+
+    if (emoji === "👍") {
+      if (data.equipo2.length >= maxE) return
+      data.equipo1 = data.equipo1.filter(u => u !== user)
+      if (!data.equipo2.includes(user)) data.equipo2.push(user)
+    }
   }
 
   await actualizar(sock, from, data)
 
-  // 🚨 ALERTAS LLAMATIVAS
-  if (!estabaEscuadraLlena && data.escuadra.length === maxE) {
-    await sock.sendMessage(from, {
-      text: `🚫 *ESCUADRA LLENA*\nNo quedan cupos disponibles.`
-    })
+  // 🚨 ALERTAS PRO
+  if (tipo === "normal") {
+
+    if (!estabaEscuadraLlena && data.escuadra.length === maxE) {
+      await sock.sendMessage(from, {
+        text: `*🚫 ESCUADRA LLENA*\nYa no hay espacios disponibles.`
+      })
+    }
+
+    if (!estabaSuplentesLlena && data.suplentes.length === maxS) {
+      await sock.sendMessage(from, {
+        text: `*🚫 SUPLENTES LLENOS*\nYa no hay espacios disponibles.`
+      })
+    }
   }
 
-  if (!estabaSuplentesLlena && data.suplentes.length === maxS) {
-    await sock.sendMessage(from, {
-      text: `🚫 *SUPLENTES LLENOS*\nNo quedan cupos disponibles.`
-    })
+  if (tipo === "interna") {
+
+    if (!estabaEquipo1Lleno && data.equipo1.length === maxE) {
+      await sock.sendMessage(from, {
+        text: `*🚫 EQUIPO 1 LLENO*\nYa no hay espacios disponibles.`
+      })
+    }
+
+    if (!estabaEquipo2Lleno && data.equipo2.length === maxE) {
+      await sock.sendMessage(from, {
+        text: `*🚫 EQUIPO 2 LLENO*\nYa no hay espacios disponibles.`
+      })
+    }
   }
 }
 
-// 🧠 TEXTO PRINCIPAL
+// 🧠 TEXTO PRO
 function generarTexto(data) {
 
-  const { escuadra: maxE, suplentes: maxS, titulo } = data.config
+  const { escuadra: maxE, suplentes: maxS, titulo, tipo } = data.config
 
-  const dispE = maxE - data.escuadra.length
-  const dispS = maxS - data.suplentes.length
-
-  const formatEscuadra = (arr, max) => {
-    const filled = arr.map(u => `🥷 │ @${u.split("@")[0]}`)
-    while (filled.length < max) filled.push(`🥷 │ vacío`)
+  const format = (arr, max, emoji) => {
+    const filled = arr.map(u => `${emoji} │ @${u.split("@")[0]}`)
+    while (filled.length < max) filled.push(`${emoji} │ vacío`)
     return filled.join("\n")
   }
 
-  const formatSuplentes = (arr, max) => {
-    const filled = arr.map(u => `❕ │ @${u.split("@")[0]}`)
-    while (filled.length < max) filled.push(`❕ │ vacío`)
-    return filled.join("\n")
+  // 🔴 INTERNA
+  if (tipo === "interna") {
+    return `
+╭━━━〔 ${titulo} 〕━━━╮
+${data.hora ? `⏰ ${data.hora}\n` : ""}
+
+🛡️ Escuadra 1 (${maxE - data.equipo1.length})
+${format(data.equipo1, maxE, "🥷")}
+
+🛡️ Escuadra 2 (${maxE - data.equipo2.length})
+${format(data.equipo2, maxE, "🥷")}
+
+╰━━━━━━━━━━━━━━━╯
+
+❤️ = Equipo 1
+👍 = Equipo 2
+💔 = Salir
+`
   }
 
+  // 🔵 NORMAL
   return `
 ╭━━━〔 ${titulo} 〕━━━╮
 ${data.hora ? `⏰ ${data.hora}\n` : ""}
 
-🛡️ Escuadra (${dispE} disponibles)
-${formatEscuadra(data.escuadra, maxE)}
+🛡️ Escuadra (${maxE - data.escuadra.length})
+${format(data.escuadra, maxE, "🥷")}
 
-🧤 Suplentes (${dispS} disponibles)
-${formatSuplentes(data.suplentes, maxS)}
+🧤 Suplentes (${maxS - data.suplentes.length})
+${format(data.suplentes, maxS, "❕")}
 
-╰━━━━━━━━━━━━━━━━━━╯
+╰━━━━━━━━━━━━━━━╯
 
-❤️ = Entrar Escuadra
-👍 = Entrar Suplente
+❤️ = Escuadra
+👍 = Suplente
 💔 = Salir
-
-(Reacciona a este mensaje)
 `
 }
 
-// 🔄 ACTUALIZAR
+// 🔄 ACTUALIZAR (FIX REAL)
 async function actualizar(sock, from, data) {
 
   const texto = generarTexto(data)
@@ -142,23 +203,29 @@ async function actualizar(sock, from, data) {
   try {
     await sock.sendMessage(from, {
       text: texto,
-      edit: {
-        remoteJid: from,
-        id: data.listaKey.id,
-        fromMe: true
-      },
-      mentions: [...data.escuadra, ...data.suplentes]
+      edit: data.listaKey, // 🔥 FIX
+      mentions: [
+        ...data.escuadra,
+        ...data.suplentes,
+        ...data.equipo1,
+        ...data.equipo2
+      ]
     })
   } catch {
     const newMsg = await sock.sendMessage(from, {
       text: texto,
-      mentions: [...data.escuadra, ...data.suplentes]
+      mentions: [
+        ...data.escuadra,
+        ...data.suplentes,
+        ...data.equipo1,
+        ...data.equipo2
+      ]
     })
     data.listaKey = newMsg.key
   }
 }
 
-// 🕒 HORA CON BANDERAS
+// 🕒 HORA
 function parseHora(texto) {
   if (!texto) return null
 

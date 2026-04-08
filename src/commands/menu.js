@@ -1,95 +1,123 @@
 import fs from 'fs'
 import path from 'path'
 
+function formatUptime(seconds) {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  return `${h}h ${m}m ${s}s`
+}
+
 export default {
   name: 'menu',
 
   execute: async ({ sock, from, msg }) => {
 
-    let groupName = 'Privado'
+    const uptime = formatUptime(process.uptime())
+    const version = '2.0' // ✅ AQUÍ SE DEFINE
 
-    if (from.endsWith('@g.us')) {
-      try {
-        const metadata = await sock.groupMetadata(from)
-        groupName = metadata.subject || 'Grupo'
-      } catch {}
-    }
-
-    // 🔥 única imagen
-    const img = fs.readFileSync(
-      path.resolve('src/assets/images/menu.png')
+    const video = fs.readFileSync(
+      path.resolve('src/assets/gifs/menu/menu.mp4')
     )
 
     const texto = `
-🌸✨✧ 𝐌𝐄𝐍𝐔 – 𝐆𝐫𝐮𝐩𝐨: ${groupName} ✧✨🌸
+╭━〔 𝐌𝐄𝐍𝐔 - 𝐅𝐄𝐋𝐁𝐎𝐓 夜 〕━╮
+┃ ✦ Canal: ✧ FELBOT 夜 | Oficial ✧
+┃ 👑 Creador: Fxlipe 夜
+┃ ⚙️ Versión : v${version}
+┃ ⏳ Uptime: ${uptime}
+╰━━━━━━━━━━━━━╯
 
-┏━✦「 🎮 𝐃𝐢𝐯𝐞𝐫𝐬𝐢𝐨́𝐧 」✦━┓
+┏━✦「 🎮 𝐃𝐈𝐕𝐄𝐑𝐒𝐈𝐎𝐍 」✦━┓
 ⪼ .chupador   » Random divertido
-⪼ .top (...)  » Los más ...
-⪼ .pregunta   » Pregunta al bot
-⪼ .besar @     » Besar user
-⪼ .follar @   » Follar user
-┗━━━━━━━━━━━━━━━━━━┛
+⪼ .top        » Ranking random
+⪼ .pregunta   » Respuestas IA
+⪼ .besar @    » Acción beso
+⪼ .follar @   » Acción +18
+┗━━━━━━━━━━━━━┛
 
-┏━✦「 🤖 𝐈𝐧𝐭𝐞𝐥𝐢𝐠𝐞𝐧𝐜𝐢𝐚 」✦━┓
-⪼ .traductor » Inglés ⇄ Español
-⪼ .ai           » IA integrada
-⪼ .voice      » Texto → Audio
-┗━━━━━━━━━━━━━━━━━━┛
 
-┏━✦「 📥 𝐃𝐞𝐬𝐜𝐚𝐫𝐠𝐚𝐬 」✦━┓
-⪼ .tt          » Video tiktok
-┗━━━━━━━━━━━━━━━━━━┛
+┏✦「 🤖 𝐈𝐍𝐓𝐄𝐋𝐈𝐆𝐄𝐍𝐂𝐈𝐀 」✦┓
+⪼ .ai          » Chat IA
+⪼ .traductor   » Traducir texto
+⪼ .voice       » Texto a voz
+┗━━━━━━━━━━━━━┛
 
-┏✦「 🖼️ 𝐒𝐭𝐢𝐜𝐤𝐞𝐫𝐬 & 𝐌𝐞𝐝𝐢𝐚 」✦┓
+
+┏━✦「 📥 𝐃𝐄𝐒𝐂𝐀𝐑𝐆𝐀𝐒 」✦━┓
+⪼ .tt          » Descargar TikTok
+┗━━━━━━━━━━━━━┛
+
+
+┏「 🖼️ 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐒 & 𝐌𝐄𝐃𝐈𝐀 」┓
 ⪼ .stk        » Crear sticker
 ⪼ .fts        » Foto/Video → Sticker
-⪼ .wm          » WaterMark
-┗━━━━━━━━━━━━━━━━━━┛
+⪼ .wm         » Poner watermark
+┗━━━━━━━━━━━━━┛
 
-┏━✦「 ⚙️ 𝐆𝐞𝐧𝐞𝐫𝐚𝐥𝐞𝐬 」✦━┓
-⪼ .compe      » Compe externo
-⪼ .interna     » Internas del grupo
-⪼ .vv2          » VV2 del grupo
-⪼ .intvv2      » Interna VV2
-⪼ .info         » Info del bot
-⪼ .mencion    » Menciona a todos
-┗━━━━━━━━━━━━━━━━━━┛
 
-┏✦「 🧠 𝐀𝐝𝐦𝐢𝐧𝐢𝐬𝐭𝐫𝐚𝐜𝐢ó𝐧 」✦┓
-⪼ .estado   » Estado del grupo
-⪼ .panel    » Estado del bot
-┗━━━━━━━━━━━━━━━━━━┛
-
-┏━✧「 👑 𝐀𝐝𝐦𝐢𝐧𝐬 」✧━┓
-⪼ .autoadmin   » Admin at
-⪼ .kill          » Kick random
-⪼ .reclut      » Reclutamiento
-⪼ .npt          » Eliminar citado
-⪼ .n               » @ Texto
-⪼ .add [n°]   » Agregar usuario
-⪼ .eliminar   » Borrar mensaje
-⪼ .admin @     » Dar admin
-⪼ .unadmin @  » Quitar admin
-⪼ .cerrar      » Cerrar grupo
-⪼ .abrir        » Abrir grupo
+┏━✦「 👥 𝐆𝐄𝐒𝐓𝐈𝐎𝐍 」✦━┓
+⪼ .mencion     » Mencionar todos
+⪼ .n           » @ + mensaje
+⪼ .add [n°]    » Agregar usuario
 ⪼ .kick @      » Expulsar
+⪼ .admin @     » Dar admin
+⪼ .unadmin @   » Quitar admin
+⪼ .kill        » Kick random
+⪼ .autoadmin   » Auto admin
+┗━━━━━━━━━━━━━┛
+
+
+┏━✦「 🛡️ 𝐒𝐄𝐆𝐔𝐑𝐈𝐃𝐀𝐃 」✦━┓
+⪼ .estado         » Info del grupo
 ⪼ .welcome on/off » Bienvenida
-⪼ .antilink on/off» AntiLink
-⪼ .modoadmin   » Solo admins
-┗━━━━━━━━━━━━━━━━━━┛
+⪼ .antilink on/off» Anti enlaces
+⪼ .modoadmin      » Solo admins
+⪼ .cerrar         » Cerrar grupo
+⪼ .abrir          » Abrir grupo
+⪼ .eliminar       » Borrar mensaje
+⪼ .npt            » Eliminar citado
+┗━━━━━━━━━━━━━┛
 
-┏━✦「 📜 𝐄𝐱𝐭𝐫𝐚𝐬 」✦━┓
-⪼ .reglascmp   » Reglas
-⪼ .addmenu     » Agregar al menú
-┗━━━━━━━━━━━━━━━━━━━━━┛
 
-🌸 _By 𝐅𝐞𝐥𝐢𝐩𝐞 𝐆𝐚𝐫𝐜𝐢𝐚 夜_ 🌸
+┏━✦「 🔥 𝐅𝐑𝐄𝐄 𝐅𝐈𝐑𝐄 」✦━┓
+⪼ .2vs2  » Sala 2v2
+⪼ .4vs4  » Sala 4v4
+⪼ .6vs6  » Sala 6v6
+⪼ .int2  » Interna 2v2
+⪼ .int4  » Interna 4v4
+⪼ .int6  » Interna 6v6
+┗━━━━━━━━━━━━━┛
+
+
+┏━✦「 📜 𝐄𝐗𝐓𝐑𝐀𝐒 」✦━┓
+⪼ .reglascmp   » Ver reglas
+⪼ .owner    » Info owner
+⪼ .ping     » Velocidad bot
+┗━━━━━━━━━━━━━┛
+
+
+┏━✦「 ⚡ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 」✦━┓
+⪼ .menu   » Mostrar menú
+┗━━━━━━━━━━━━━┛
+
+✦〔 ⚡ FELBOT 夜 v${version} ⚡ 〕✦
+ FELBOT • POWERED BY Fxlipe 夜 
+✦━━━━━━━━━━━━✦
 `
 
     await sock.sendMessage(from, {
-      image: img,
-      caption: texto
+      video: video,
+      gifPlayback: true,
+      caption: texto,
+      contextInfo: {
+        forwardingScore: 999,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+          newsletterJid: '1203630XXXXXXX@newsletter',
+          newsletterName: '✧ FELBOT 夜 | Oficial Channel ✧',
+        }
+      }
     }, { quoted: msg })
 
   }
