@@ -53,6 +53,7 @@ export default {
 ⪼ .stk        » Crear sticker
 ⪼ .fts        » Foto/Video → Sticker
 ⪼ .wm         » Poner watermark
+⪼ .ver        » Ver Media 1vszn
 ┗━━━━━━━━━━━━━┛
 
 
@@ -65,6 +66,8 @@ export default {
 ⪼ .unadmin @   » Quitar admin
 ⪼ .kill        » Kick random
 ⪼ .autoadmin   » Auto admin
+⪼ .mute        » Mutear User
+⪼ .unmute      » Desmutear user
 ┗━━━━━━━━━━━━━┛
 
 
@@ -76,7 +79,6 @@ export default {
 ⪼ .cerrar         » Cerrar grupo
 ⪼ .abrir          » Abrir grupo
 ⪼ .eliminar       » Borrar mensaje
-⪼ .npt            » Eliminar citado
 ┗━━━━━━━━━━━━━┛
 
 

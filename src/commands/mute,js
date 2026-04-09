@@ -1,0 +1,37 @@
+const muted = global.muted || (global.muted = {})
+
+export default {
+  name: 'mute',
+  adminOnly: true,
+  groupOnly: true,
+
+  async execute({ sock, from, msg }) {
+
+    const ctx = msg.message?.extendedTextMessage?.contextInfo
+
+    let user
+
+    if (ctx?.mentionedJid?.length) {
+      user = ctx.mentionedJid[0]
+    } else if (ctx?.participant) {
+      user = ctx.participant
+    } else {
+      return sock.sendMessage(from, {
+        text: '⚠️ Menciona o responde a alguien.'
+      }, { quoted: msg })
+    }
+
+    if (!muted[from]) muted[from] = []
+
+    if (!muted[from].includes(user)) {
+      muted[from].push(user)
+    }
+
+    const number = user.split('@')[0]
+
+    await sock.sendMessage(from, {
+      text: `🔇 Usuario @${number} muteado correctamente`,
+      mentions: [user]
+    }, { quoted: msg })
+  }
+}

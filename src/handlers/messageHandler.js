@@ -3,6 +3,9 @@ import { antiLink } from '../events/antiLink.js'
 import { modoAdmin } from '../events/modoadmin.js'
 import { handleReaccion } from '../commands/vs.js'
 
+// 🔇 SISTEMA MUTE GLOBAL
+global.muted = global.muted || {}
+
 const commands = new Map()
 
 const loadCommands = async () => {
@@ -61,6 +64,23 @@ export async function startMessageHandler(sock) {
 
     const clean = (jid) => jid?.split('@')[0]
 
+    // 🔇 BLOQUEO DE MUTEADOS
+    if (isGroup && global.muted[from]?.includes(sender)) {
+      try {
+        await sock.sendMessage(from, {
+          delete: {
+            remoteJid: from,
+            fromMe: false,
+            id: msg.key.id,
+            participant: sender
+          }
+        })
+      } catch (e) {
+        console.log('Error eliminando mensaje:', e)
+      }
+      return
+    }
+
     // 🔥 REACCIONES
     await handleReaccion(sock, msg, from)
 
@@ -86,7 +106,7 @@ export async function startMessageHandler(sock) {
         botData?.admin === 'superadmin'
     }
 
-    // 👑 OWNER (pon tu número aquí)
+    // 👑 OWNER
     const owners = ['573001234567']
     isOwner = owners.includes(clean(sender))
 
@@ -113,24 +133,21 @@ export async function startMessageHandler(sock) {
         mentions
       }, { quoted: msg })
 
-    // 🔒 SOLO GRUPO
+    // 🔒 VALIDACIONES
     if (command.groupOnly && !isGroup) {
-      return reply('❌ Este comando solo funciona en grupos.')
+      return reply('❌ Solo en grupos.')
     }
 
-    // 🔒 SOLO ADMIN
     if (command.adminOnly && !isAdmin) {
-      return reply('❌ Solo los administradores pueden usar este comando.')
+      return reply('❌ Solo admins.')
     }
 
-    // 🔒 BOT ADMIN
     if (command.botAdmin && !isBotAdmin) {
-      return reply('❌ El bot necesita ser administrador.')
+      return reply('❌ El bot necesita admin.')
     }
 
-    // 👑 SOLO OWNER
     if (command.ownerOnly && !isOwner) {
-      return reply('❌ Solo el owner puede usar este comando.')
+      return reply('❌ Solo el owner.')
     }
 
     try {
@@ -141,8 +158,6 @@ export async function startMessageHandler(sock) {
         msg,
         text,
         command: commandName,
-
-        // 🔥 PODER TOTAL
         isGroup,
         isAdmin,
         isBotAdmin,
@@ -150,8 +165,7 @@ export async function startMessageHandler(sock) {
         participants,
         metadata,
         sender,
-
-        reply // 💬 respuesta rápida citando
+        reply
       })
     } catch (err) {
       console.error(`❌ Error en ${commandName}:`, err)
