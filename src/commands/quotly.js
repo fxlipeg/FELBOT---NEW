@@ -14,7 +14,8 @@ export default {
 
       if (!text) {
         return sock.sendMessage(from, {
-          text: '❗ Usa: .quotly <texto>'//
+          text: '❗ Usa: .quotly <texto>'
+        
         }, { quoted: msg })
       }
 
