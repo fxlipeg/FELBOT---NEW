@@ -3,7 +3,7 @@ import ffmpeg from "fluent-ffmpeg";
 import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 
 export default {
-  name: "fts",
+  name: "s",
 
   execute: async ({ sock, from, msg }) => {
     try {

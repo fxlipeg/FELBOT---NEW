@@ -51,9 +51,10 @@ export default {
 
 ┏「 🖼️ 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐒 & 𝐌𝐄𝐃𝐈𝐀 」┓
 ⪼ .stk        » Crear sticker
-⪼ .fts        » Foto/Video → Sticker
+⪼ .s          » Foto/Video → Sticker
 ⪼ .wm         » Poner watermark
 ⪼ .ver        » Ver Media 1vszn
+⪼ .quotly     » Stiker (negro)
 ┗━━━━━━━━━━━━━┛
 
 
@@ -95,6 +96,7 @@ export default {
 ┏━✦「 📜 𝐄𝐗𝐓𝐑𝐀𝐒 」✦━┓
 ⪼ .reglascmp   » Ver reglas
 ⪼ .owner    » Info owner
+⪼ .lid      » Lid user
 ⪼ .ping     » Velocidad bot
 ┗━━━━━━━━━━━━━┛
 
