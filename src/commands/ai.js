@@ -1,5 +1,5 @@
 import { preguntarIA } from '../services/ia/ia.js'
-
+//
 export default {
   name: 'ai',
 
