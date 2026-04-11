@@ -4,8 +4,23 @@ import makeWASocket, {
   DisconnectReason
 } from '@whiskeysockets/baileys'
 import qrTerm from 'qrcode-terminal'
+import fs from 'fs'
 
 export async function startSocket() {
+
+  // 🔥 RESTAURAR SESSION DESDE ENV
+  if (process.env.SESSION) {
+    const data = JSON.parse(process.env.SESSION)
+
+    if (!fs.existsSync('./auth')) {
+      fs.mkdirSync('./auth')
+    }
+
+    for (const file in data) {
+      fs.writeFileSync(`./auth/${file}`, data[file], 'base64')
+    }
+  }
+
   const { state, saveCreds } = await useMultiFileAuthState('./auth')
   const { version } = await fetchLatestBaileysVersion()
 
