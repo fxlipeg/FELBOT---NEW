@@ -4,6 +4,3 @@ tmp/
 session/
 *.log
 .env
-auth/*.log
-auth/*.tmp
-auth/*cache*

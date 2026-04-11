@@ -3,14 +3,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   DisconnectReason
 } from '@whiskeysockets/baileys'
-
 import qrTerm from 'qrcode-terminal'
-
-// 🔥 IMPORTS CON TU RUTA REAL
-import { cleanAuth } from '../commands/authCleaner.js'
-import { backupAuth } from '../commands/authBackup.js'
-// 🧹 limpiar auth al iniciar
-cleanAuth()
 
 export async function startSocket() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth')
@@ -18,31 +11,23 @@ export async function startSocket() {
 
   const sock = makeWASocket({
     version,
-    auth: state,
-    printQRInTerminal: false
+    auth: state
   })
 
-  // 💾 guardar + backup automático
-  sock.ev.on('creds.update', () => {
-    saveCreds()
-    backupAuth()
-  })
+  sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
-    // 📲 QR (solo si no hay sesión)
     if (qr) {
       console.log('📲 Escanea el QR:')
       qrTerm.generate(qr, { small: true })
     }
 
-    // ✅ conectado
     if (connection === 'open') {
-      console.log('✅ BOT CONECTADO')
+      console.log('✅ Conectado a WhatsApp')
     }
 
-    // ❌ desconectado
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
 
@@ -54,7 +39,7 @@ export async function startSocket() {
         console.log('🔁 Reconectando...')
         startSocket()
       } else {
-        console.log('🚫 Sesión cerrada, necesitas QR')
+        console.log('🚫 Sesión cerrada, escanea QR otra vez')
       }
     }
   })
