@@ -7,9 +7,8 @@ import makeWASocket, {
 import qrTerm from 'qrcode-terminal'
 
 // 🔥 IMPORTS CON TU RUTA REAL
-import { cleanAuth } from '../src/commands/authCleaner.js'
-import { backupAuth } from '../src/commands/authBackup.js'
-
+import { cleanAuth } from '../commands/authCleaner.js'
+import { backupAuth } from '../commands/authBackup.js'
 // 🧹 limpiar auth al iniciar
 cleanAuth()
 
