@@ -5,7 +5,7 @@ import { exec } from 'child_process'
 export default {
   name: 'quotly',
 
-  async execute({ sock, msg, args }) {//
+  async execute({ sock, msg, args }) {
     try {
       const from = msg.key.remoteJid
       const sender = msg.key.participant || msg.key.remoteJid
