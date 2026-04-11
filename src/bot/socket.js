@@ -5,10 +5,12 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 
 import qrTerm from 'qrcode-terminal'
-import { cleanAuth } from './authCleaner.js'
-import { backupAuth } from './authBackup.js'
 
-// 🔥 LIMPIAR AL INICIO
+// 🔥 IMPORTS CON TU RUTA REAL
+import { cleanAuth } from '../src/commands/authCleaner.js'
+import { backupAuth } from '../src/commands/authBackup.js'
+
+// 🧹 limpiar auth al iniciar
 cleanAuth()
 
 export async function startSocket() {
@@ -30,25 +32,30 @@ export async function startSocket() {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
+    // 📲 QR (solo si no hay sesión)
     if (qr) {
-      console.log('📲 Escanea QR:')
+      console.log('📲 Escanea el QR:')
       qrTerm.generate(qr, { small: true })
     }
 
+    // ✅ conectado
     if (connection === 'open') {
-      console.log('✅ BOT ONLINE')
+      console.log('✅ BOT CONECTADO')
     }
 
+    // ❌ desconectado
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
 
-      const reconnect = code !== DisconnectReason.loggedOut
+      console.log('❌ Conexión cerrada:', code)
 
-      if (reconnect) {
+      const shouldReconnect = code !== DisconnectReason.loggedOut
+
+      if (shouldReconnect) {
         console.log('🔁 Reconectando...')
         startSocket()
       } else {
-        console.log('🚫 Sesión perdida (nuevo QR)')
+        console.log('🚫 Sesión cerrada, necesitas QR')
       }
     }
   })
