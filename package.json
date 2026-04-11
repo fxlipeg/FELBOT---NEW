@@ -21,6 +21,7 @@
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "adm-zip": "^0.5.17",
     "axios": "^1.14.0",
     "canvas": "^3.2.3",
     "dotenv": "^17.4.0",
