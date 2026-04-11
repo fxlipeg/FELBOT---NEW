@@ -5,32 +5,14 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 
 import qrTerm from 'qrcode-terminal'
-import fs from 'fs'
-import AdmZip from 'adm-zip'
+import { cleanAuth } from './authCleaner.js'
+import { backupAuth } from './authBackup.js'
 
-const SESSION_PATH = './auth'
-
-// 🔥 RECONSTRUIR SESIÓN DESDE ENV
-if (process.env.SESSION) {
-  try {
-    if (!fs.existsSync(SESSION_PATH)) {
-      fs.mkdirSync(SESSION_PATH)
-    }
-
-    const buffer = Buffer.from(process.env.SESSION, 'base64')
-    fs.writeFileSync('./auth.zip', buffer)
-
-    const zip = new AdmZip('./auth.zip')
-    zip.extractAllTo(SESSION_PATH, true)
-
-    console.log('✅ Sesión cargada desde variables de entorno')
-  } catch (err) {
-    console.log('❌ Error cargando sesión:', err)
-  }
-}
+// 🔥 LIMPIAR AL INICIO
+cleanAuth()
 
 export async function startSocket() {
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH)
+  const { state, saveCreds } = await useMultiFileAuthState('./auth')
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
@@ -39,36 +21,34 @@ export async function startSocket() {
     printQRInTerminal: false
   })
 
-  // 🔐 Guardar credenciales automáticamente
-  sock.ev.on('creds.update', saveCreds)
+  // 💾 guardar + backup automático
+  sock.ev.on('creds.update', () => {
+    saveCreds()
+    backupAuth()
+  })
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
-    // 📲 Mostrar QR solo si no hay sesión
     if (qr) {
-      console.log('📲 Escanea el QR:')
+      console.log('📲 Escanea QR:')
       qrTerm.generate(qr, { small: true })
     }
 
-    // ✅ Conectado
     if (connection === 'open') {
-      console.log('✅ Conectado a WhatsApp')
+      console.log('✅ BOT ONLINE')
     }
 
-    // ❌ Desconectado
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
 
-      console.log('❌ Conexión cerrada:', code)
+      const reconnect = code !== DisconnectReason.loggedOut
 
-      const shouldReconnect = code !== DisconnectReason.loggedOut
-
-      if (shouldReconnect) {
+      if (reconnect) {
         console.log('🔁 Reconectando...')
         startSocket()
       } else {
-        console.log('🚫 Sesión cerrada, necesitas nuevo QR')
+        console.log('🚫 Sesión perdida (nuevo QR)')
       }
     }
   })
