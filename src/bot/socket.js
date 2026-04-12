@@ -6,7 +6,7 @@ import makeWASocket, {
 import qrTerm from 'qrcode-terminal'
 
 export async function startSocket() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth')
+useMultiFileAuthState('../../auth')
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
