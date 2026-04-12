@@ -11,7 +11,7 @@ export default {
       if (!packName) {
         return await sock.sendMessage(from, {
           text: "╭━━━〔 ⚠️ 𝖂𝖆𝖙𝖊𝖗𝖒𝖆𝖗𝖐 〕━━━╮\n┃ Usa: *.wm nombre*\n╰━━━━━━━━━━━━━━━╯"
-        }, { quoted: msg });
+        }, { quoted: msg });//
       }
 
       const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
