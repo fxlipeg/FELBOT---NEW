@@ -1,22 +1,13 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  DisconnectReason
-} from '@whiskeysockets/baileys'
-
+import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys'
 import qrTerm from 'qrcode-terminal'
 
 export async function startSocket() {
-
-  // ✅ ESTA LÍNEA ES LA CLAVE
-  const { state, saveCreds } = await useMultiFileAuthState('../../auth')
-
+  const { state, saveCreds } = await useMultiFileAuthState('./auth')
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
     version,
-    auth: state,
-    printQRInTerminal: false
+    auth: state
   })
 
   sock.ev.on('creds.update', saveCreds)
@@ -30,7 +21,7 @@ export async function startSocket() {
     }
 
     if (connection === 'open') {
-      console.log('✅ BOT CONECTADO')
+      console.log('✅ Conectado a WhatsApp')
     }
 
     if (connection === 'close') {
@@ -44,7 +35,7 @@ export async function startSocket() {
         console.log('🔁 Reconectando...')
         startSocket()
       } else {
-        console.log('🚫 Sesión cerrada, necesitas QR')
+        console.log('🚫 Sesión cerrada, escanea QR otra vez')
       }
     }
   })
