@@ -1,8 +1,19 @@
+import fs from 'fs'
 import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys'
 import qrTerm from 'qrcode-terminal'
 
 export async function startSocket() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth')
+
+  const authPath = './auth'
+
+  // 🔥 VERIFICAR AUTH
+  if (!fs.existsSync(authPath)) {
+    console.log('❌ NO EXISTE AUTH → se generará nueva sesión')
+  } else {
+    console.log('📁 AUTH ENCONTRADA → usando sesión guardada')
+  }
+
+  const { state, saveCreds } = await useMultiFileAuthState(authPath)
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
@@ -21,7 +32,7 @@ export async function startSocket() {
     }
 
     if (connection === 'open') {
-      console.log('✅ Conectado a WhatsApp')
+      console.log('✅ CONECTADO USANDO AUTH')
     }
 
     if (connection === 'close') {
@@ -35,7 +46,7 @@ export async function startSocket() {
         console.log('🔁 Reconectando...')
         startSocket()
       } else {
-        console.log('🚫 Sesión cerrada, escanea QR otra vez')
+        console.log('🚫 Sesión inválida, QR requerido')
       }
     }
   })

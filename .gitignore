@@ -1,6 +1,5 @@
 node_modules/
-auth/
-tmp/
-session/
-*.log
 .env
+npm-debug.log
+yarn-error.log
+.DS_Store
