@@ -7,7 +7,7 @@ export async function startSocket() {
   const authPath = './auth'
 
   // 🔥 VERIFICAR AUTH
-  if (!fs.existsSync(authPath)) {
+  if (!fs.existsSync(authPath)) {//
     console.log('❌ NO EXISTE AUTH → se generará nueva sesión')
   } else {
     console.log('📁 AUTH ENCONTRADA → usando sesión guardada')
