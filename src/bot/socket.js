@@ -7,7 +7,7 @@ export async function startSocket() {
   const authPath = './auth'
 
   // 🔥 VERIFICAR AUTH
-  if (!fs.existsSync(authPath)) {//
+  if (!fs.existsSync(authPath)) {
     console.log('❌ NO EXISTE AUTH → se generará nueva sesión')
   } else {
     console.log('📁 AUTH ENCONTRADA → usando sesión guardada')
@@ -18,10 +18,41 @@ export async function startSocket() {
 
   const sock = makeWASocket({
     version,
-    auth: state
+    auth: state,
+    printQRInTerminal: false,
+    markOnlineOnConnect: false,
+    syncFullHistory: false
   })
 
   sock.ev.on('creds.update', saveCreds)
+
+  // 🔥 ESCUCHAR MENSAJES
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    try {
+      const msg = messages[0]
+      if (!msg.message) return
+      if (msg.key.fromMe) return
+
+      const from = msg.key.remoteJid
+
+      const text =
+        msg.message.conversation ||
+        msg.message.extendedTextMessage?.text ||
+        ''
+
+      if (!text) return
+
+      console.log(`📩 Comando recibido: ${text}`)
+
+      // 👇 RESPUESTA BÁSICA
+      if (text.toLowerCase() === 'hola') {
+        await sock.sendMessage(from, { text: '👋 Hola, soy tu bot' })
+      }
+
+    } catch (err) {
+      console.log('⚠️ Error leyendo mensaje:', err)
+    }
+  })
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
