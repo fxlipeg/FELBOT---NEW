@@ -5,28 +5,36 @@ import { startMessageHandler } from './handlers/messageHandler.js'
 import { startGroupEvents } from './events/group-participants.js'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegPath from 'ffmpeg-static'
-ffmpeg.setFfmpegPath(ffmpegPath)
 import 'dotenv/config'
 
+ffmpeg.setFfmpegPath(ffmpegPath)
 
 const botStatus = { value: "INICIANDO..." }
 
 async function startApp() {
-  console.log('🚀 Iniciando bot...')
+  try {
+    console.log('🚀 Iniciando bot...')
 
-  await startDatabase()
+    // 🔥 1. CONECTAR MONGO PRIMERO (CLAVE)
+    await startDatabase()
 
-  startServer(botStatus)
+    // 🔥 2. LEVANTAR SERVIDOR WEB
+    startServer(botStatus)
 
-  const sock = await startSocket()
-  
-startGroupEvents(sock) 
+    // 🔥 3. INICIAR SOCKET (usa Mongo auth)
+    const sock = await startSocket()
 
- startMessageHandler(sock) 
+    // 🔥 4. EVENTOS
+    startGroupEvents(sock)
+    startMessageHandler(sock)
 
-  botStatus.value = "CONECTADO"
+    botStatus.value = "CONECTADO"
 
-  console.log('✅ Bot listo')
+    console.log('✅ Bot listo')
+
+  } catch (err) {
+    console.error('❌ Error al iniciar:', err)
+  }
 }
 
 startApp()
