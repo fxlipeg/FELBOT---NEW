@@ -12,11 +12,16 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-let sock
+let sock = null
+let isRestarting = false
+let keepAliveInterval = null
+
 const commands = new Map()
 const cooldowns = new Map()
 
+// =======================
 // 🔥 CARGAR COMANDOS
+// =======================
 async function loadCommands() {
   commands.clear()
 
@@ -27,12 +32,11 @@ async function loadCommands() {
     if (!file.endsWith('.js')) continue
 
     try {
-      const cmd = await import(`../commands/${file}?update=${Date.now()}`)
+      const cmd = await import(`../commands/${file}?v=${Date.now()}`)
       const command = cmd.default
 
       commands.set(command.name, command)
 
-      // aliases
       if (command.aliases) {
         for (const alias of command.aliases) {
           commands.set(alias, command)
@@ -40,13 +44,45 @@ async function loadCommands() {
       }
 
     } catch (err) {
-      console.log(`❌ Error en ${file}:`, err.message)
+      console.log(`❌ Error cargando ${file}:`, err.message)
     }
   }
 
   console.log('✅ COMANDOS:', [...commands.keys()])
 }
 
+// =======================
+// 🔥 RESTART SEGURO
+// =======================
+async function safeRestart() {
+  if (isRestarting) return
+  isRestarting = true
+
+  console.log('🔄 Reinicio controlado...')
+
+  try {
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval)
+      keepAliveInterval = null
+    }
+
+    if (sock?.ws) {
+      sock.ws.close()
+    }
+
+    sock = null
+
+  } catch {}
+
+  setTimeout(async () => {
+    isRestarting = false
+    await startSocket()
+  }, 5000)
+}
+
+// =======================
+// 🚀 SOCKET PRINCIPAL
+// =======================
 export async function startSocket() {
 
   await loadCommands()
@@ -65,7 +101,9 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // 🔥 MENSAJES
+  // =======================
+  // 📩 MENSAJES
+  // =======================
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages[0]
@@ -95,13 +133,12 @@ export async function startSocket() {
       const command = commands.get(commandName)
       if (!command) return
 
-      // 🔥 LOG LIMPIO
       console.log(`⚡ ${commandName} | ${sender}`)
 
       // 🔒 SOLO GRUPOS
       if (command.groupOnly && !isGroup) {
         return sock.sendMessage(from, {
-          text: '❌ Este comando es solo para grupos'
+          text: '❌ Solo para grupos'
         }, { quoted: msg })
       }
 
@@ -114,7 +151,7 @@ export async function startSocket() {
 
         if (!admins.includes(sender)) {
           return sock.sendMessage(from, {
-            text: '❌ Solo admins pueden usar este comando'
+            text: '❌ Solo admins'
           }, { quoted: msg })
         }
       }
@@ -150,11 +187,13 @@ export async function startSocket() {
       })
 
     } catch (err) {
-      console.log('❌ ERROR:', err)
+      console.log('❌ ERROR MENSAJE:', err)
     }
   })
 
-  // 🔥 CONEXIÓN
+  // =======================
+  // 🔌 CONEXIÓN
+  // =======================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -173,27 +212,26 @@ export async function startSocket() {
       console.log('❌ Cerrado:', code)
 
       if (code !== DisconnectReason.loggedOut) {
-        console.log('🔄 Reconectando...')
-        setTimeout(() => startSocket(), 3000)
+        await safeRestart()
       } else {
-        console.log('🚫 Sesión inválida')
+        console.log('🚫 Sesión inválida (borra Mongo)')
       }
     }
   })
 
-  // 🔥 KEEP ALIVE
-  setInterval(async () => {
+  // =======================
+  // 🟢 KEEP ALIVE REAL
+  // =======================
+  keepAliveInterval = setInterval(async () => {
     try {
       if (!sock) return
 
       await sock.sendPresenceUpdate('available')
-      await loadCommands()
-
       console.log('🟢 KeepAlive OK')
 
-    } catch {
-      console.log('⚠️ Socket muerto → reiniciando')
-      startSocket()
+    } catch (err) {
+      console.log('⚠️ KeepAlive falló')
+      await safeRestart()
     }
   }, 30000)
 
