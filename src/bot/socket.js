@@ -13,58 +13,32 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// 🔥 normaliza comandos
 function normalizeCommand(cmd = '') {
-  return cmd
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .trim()
+  return cmd.toLowerCase().replace(/[^a-z0-9]/g, '').trim()
 }
 
-// 🔥 CARGA RECURSIVA DE COMANDOS (subcarpetas incluidas)
+// 🔥 carga comandos (simple y estable)
 async function loadCommands(dir) {
   const commands = new Map()
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
 
-  function readFolder(folder) {
-    const files = fs.readdirSync(folder)
+  for (const file of files) {
+    try {
+      const mod = await import(`../commands/${file}`)
 
-    for (const file of files) {
-      const fullPath = path.join(folder, file)
-      const stat = fs.statSync(fullPath)
+      const name = mod.name || mod.default?.name || file.replace('.js', '')
+      const execute = mod.execute || mod.default?.execute || mod.default
 
-      if (stat.isDirectory()) {
-        readFolder(fullPath)
-      } else if (file.endsWith('.js')) {
-        import(fullPath).then((cmd) => {
+      if (!name || !execute) continue
 
-          const name =
-            cmd.name ||
-            cmd.default?.name ||
-            file.replace('.js', '')
+      commands.set(normalizeCommand(name), { name, execute })
 
-          const execute =
-            cmd.execute ||
-            cmd.default?.execute ||
-            cmd.default
-
-          if (!name || !execute) {
-            console.log(`⚠️ Comando inválido: ${file}`)
-            return
-          }
-
-          commands.set(normalizeCommand(name), {
-            name,
-            execute
-          })
-
-          console.log(`⚡ Comando cargado: ${name}`)
-        }).catch(err => {
-          console.log(`❌ Error cargando ${file}:`, err.message)
-        })
-      }
+      console.log(`⚡ Comando cargado: ${name}`)
+    } catch (e) {
+      console.log(`❌ Error cargando ${file}:`, e.message)
     }
   }
-
-  readFolder(dir)
 
   return commands
 }
@@ -91,10 +65,13 @@ export async function startSocket() {
     const msg = messages?.[0]
     if (!msg?.message) return
     if (msg.key.fromMe) return
+    if (msg.key.remoteJid === 'status@broadcast') return
+    if (msg.messageStubType) return
+    if (msg.message?.protocolMessage) return
 
     const from = msg.key.remoteJid
 
-    const text =
+    const rawText =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text ||
       msg.message.imageMessage?.caption ||
@@ -103,12 +80,14 @@ export async function startSocket() {
       msg.message.listResponseMessage?.singleSelectReply?.selectedRowId ||
       ''
 
-    if (!text) return
+    const body = rawText?.trim()
+    if (!body) return
 
-    const body = text.trim()
+    const parts = body.split(/ +/)
+    const commandName = normalizeCommand(parts[0])
+    const args = parts.slice(1)
 
-    const args = body.split(/ +/).slice(1)
-    const commandName = normalizeCommand(body.split(/ +/)[0])
+    if (!commandName) return
 
     console.log(`📩 Comando recibido: ${commandName}`)
 
@@ -135,12 +114,11 @@ export async function startSocket() {
     }
 
     if (connection === 'open') {
-      console.log('✅ CONECTADO (TOTAL MODE)')
+      console.log('✅ CONECTADO')
     }
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
-
       console.log('❌ Conexión cerrada:', code)
 
       const shouldReconnect = code !== DisconnectReason.loggedOut
