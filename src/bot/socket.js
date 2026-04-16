@@ -15,10 +15,12 @@ const __dirname = path.dirname(__filename)
 // 🔥 MAPA DE COMANDOS
 const commands = new Map()
 
+// 🔥 ANTI DUPLICADOS
+const processedMessages = new Set()
+
 // 🔥 CARGAR COMANDOS (ESM)
 async function loadCommands() {
   const commandsPath = path.join(__dirname, '../commands')
-
   const files = fs.readdirSync(commandsPath)
 
   for (const file of files) {
@@ -26,23 +28,27 @@ async function loadCommands() {
 
     const fullPath = path.join(commandsPath, file)
 
-    // 🔥 IMPORT DINÁMICO
-    const commandModule = await import(pathToFileURL(fullPath))
-    const command = commandModule.default
+    try {
+      const commandModule = await import(pathToFileURL(fullPath))
+      const command = commandModule.default
 
-    if (!command?.name) {
-      console.log(`❌ ${file} no tiene "name"`)
-      continue
+      if (!command?.name) {
+        console.log(`❌ ${file} sin "name"`)
+        continue
+      }
+
+      commands.set(command.name, command)
+      console.log(`✅ Comando cargado: ${command.name}`)
+
+    } catch (err) {
+      console.error(`❌ Error cargando ${file}:`, err)
     }
-
-    commands.set(command.name, command)
-    console.log(`✅ Comando cargado: ${command.name}`)
   }
 }
 
 export async function startSocket() {
 
-  await loadCommands() // 🔥 IMPORTANTE
+  await loadCommands()
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
@@ -59,8 +65,17 @@ export async function startSocket() {
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
-    if (!msg.message) return
+
+    if (!msg?.message) return
     if (msg.key.fromMe) return
+    if (!msg.key.id) return
+    if (msg.key.remoteJid === 'status@broadcast') return
+
+    // 🔥 ANTI DUPLICADOS
+    const msgId = msg.key.id
+    if (processedMessages.has(msgId)) return
+    processedMessages.add(msgId)
+    setTimeout(() => processedMessages.delete(msgId), 5000)
 
     const from = msg.key.remoteJid
 
@@ -71,9 +86,7 @@ export async function startSocket() {
 
     if (!text) return
 
-    // 🔥 PREFIJO
     const prefix = '.'
-
     if (!text.startsWith(prefix)) return
 
     const args = text.slice(prefix.length).trim().split(/ +/)
@@ -84,14 +97,14 @@ export async function startSocket() {
     const command = commands.get(cmdName)
 
     if (!command) {
-      console.log('❌ Comando no encontrado')
+      console.log('❌ Comando no existe')
       return
     }
 
     try {
       await command.execute(sock, msg, args)
     } catch (err) {
-      console.error('❌ Error en comando:', err)
+      console.error(`❌ Error en ${cmdName}:`, err)
     }
   })
 
@@ -109,7 +122,6 @@ export async function startSocket() {
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
-
       console.log('❌ Conexión cerrada:', code)
 
       const shouldReconnect = code !== DisconnectReason.loggedOut
