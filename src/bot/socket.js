@@ -6,29 +6,43 @@ import makeWASocket, {
 import qrTerm from 'qrcode-terminal'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { useMongoAuthState } from '../mongoAuth.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 🔥 CARGAR COMANDOS
+// 🔥 MAPA DE COMANDOS
 const commands = new Map()
 
-const commandsPath = path.join(__dirname, '../commands')
+// 🔥 CARGAR COMANDOS (ESM)
+async function loadCommands() {
+  const commandsPath = path.join(__dirname, '../commands')
 
-fs.readdirSync(commandsPath).forEach(file => {
-  if (!file.endsWith('.js')) return
+  const files = fs.readdirSync(commandsPath)
 
-  const command = require(path.join(commandsPath, file))
+  for (const file of files) {
+    if (!file.endsWith('.js')) continue
 
-  if (command.name) {
+    const fullPath = path.join(commandsPath, file)
+
+    // 🔥 IMPORT DINÁMICO
+    const commandModule = await import(pathToFileURL(fullPath))
+    const command = commandModule.default
+
+    if (!command?.name) {
+      console.log(`❌ ${file} no tiene "name"`)
+      continue
+    }
+
     commands.set(command.name, command)
     console.log(`✅ Comando cargado: ${command.name}`)
   }
-})
+}
 
 export async function startSocket() {
+
+  await loadCommands() // 🔥 IMPORTANTE
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
@@ -57,8 +71,6 @@ export async function startSocket() {
 
     if (!text) return
 
-    console.log(`📩 Mensaje: ${text}`)
-
     // 🔥 PREFIJO
     const prefix = '.'
 
@@ -79,7 +91,7 @@ export async function startSocket() {
     try {
       await command.execute(sock, msg, args)
     } catch (err) {
-      console.error('❌ Error ejecutando comando:', err)
+      console.error('❌ Error en comando:', err)
     }
   })
 
@@ -111,4 +123,8 @@ export async function startSocket() {
   })
 
   return sock
-}
+}git add .
+git commit -m "34"
+git push origin main
+
+
