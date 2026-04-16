@@ -22,12 +22,23 @@ const commandsPath = path.join(__dirname, '../commands')
 const files = fs.readdirSync(commandsPath)
 
 for (const file of files) {
-  if (!file.endsWith('.js')) continue
+  try {
+    if (!file.endsWith('.js') || file.startsWith('.')) continue
 
-  const command = await import(`../comandos/${file}`)
-  commands.set(command.default.name, command.default)
+    const command = await import(`../commands/${file}`)
 
-  console.log(`⚡ Comando cargado: ${command.default.name}`)
+    if (!command.default?.name || !command.default?.execute) {
+      console.log(`⚠️ Comando inválido: ${file}`)
+      continue
+    }
+
+    commands.set(command.default.name, command.default)
+
+    console.log(`⚡ Comando cargado: ${command.default.name}`)
+
+  } catch (err) {
+    console.log(`❌ Error cargando ${file}:`, err.message)
+  }
 }
 
 export async function startSocket() {
@@ -73,7 +84,7 @@ export async function startSocket() {
       if (processedMessages.has(msgId)) return
       processedMessages.add(msgId)
 
-      // limpiar memoria (evita leak)
+      // limpiar memoria
       if (processedMessages.size > 1000) {
         processedMessages.clear()
       }
