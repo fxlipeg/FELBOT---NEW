@@ -2,6 +2,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   DisconnectReason
 } from '@whiskeysockets/baileys'
+
 import qrTerm from 'qrcode-terminal'
 import fs from 'fs'
 import path from 'path'
@@ -11,42 +12,23 @@ import { useMongoAuthState } from '../mongoAuth.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 🔒 CONTROL GLOBAL
-let currentSocket = null
-const processedMessages = new Set()
-
-// 📂 CARGAR COMANDOS
+// 🔥 CARGAR COMANDOS
 const commands = new Map()
+
 const commandsPath = path.join(__dirname, '../commands')
 
-const files = fs.readdirSync(commandsPath)
+fs.readdirSync(commandsPath).forEach(file => {
+  if (!file.endsWith('.js')) return
 
-for (const file of files) {
-  try {
-    if (!file.endsWith('.js') || file.startsWith('.')) continue
+  const command = require(path.join(commandsPath, file))
 
-    const command = await import(`../commands/${file}`)
-
-    if (!command.default?.name || !command.default?.execute) {
-      console.log(`⚠️ Comando inválido: ${file}`)
-      continue
-    }
-
-    commands.set(command.default.name, command.default)
-
-    console.log(`⚡ Comando cargado: ${command.default.name}`)
-
-  } catch (err) {
-    console.log(`❌ Error cargando ${file}:`, err.message)
+  if (command.name) {
+    commands.set(command.name, command)
+    console.log(`✅ Comando cargado: ${command.name}`)
   }
-}
+})
 
 export async function startSocket() {
-
-  if (currentSocket) {
-    console.log('⚠️ Socket ya activo, evitando duplicado')
-    return currentSocket
-  }
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
@@ -59,64 +41,48 @@ export async function startSocket() {
     syncFullHistory: false
   })
 
-  currentSocket = sock
-
   sock.ev.on('creds.update', saveCreds)
 
-  // 🟢 KEEP ALIVE
-  setInterval(() => {
-    try {
-      sock.sendPresenceUpdate('available')
-      console.log('🟢 KeepAlive OK')
-    } catch {
-      console.log('⚠️ KeepAlive error')
-    }
-  }, 30000)
-
-  // 💬 MENSAJES
   sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0]
+    if (!msg.message) return
+    if (msg.key.fromMe) return
+
+    const from = msg.key.remoteJid
+
+    const text =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      ''
+
+    if (!text) return
+
+    console.log(`📩 Mensaje: ${text}`)
+
+    // 🔥 PREFIJO
+    const prefix = '.'
+
+    if (!text.startsWith(prefix)) return
+
+    const args = text.slice(prefix.length).trim().split(/ +/)
+    const cmdName = args.shift().toLowerCase()
+
+    console.log(`⚡ Comando recibido: ${cmdName}`)
+
+    const command = commands.get(cmdName)
+
+    if (!command) {
+      console.log('❌ Comando no encontrado')
+      return
+    }
+
     try {
-      const msg = messages[0]
-      if (!msg.message) return
-      if (msg.key.fromMe) return
-
-      const msgId = msg.key.id
-      if (processedMessages.has(msgId)) return
-      processedMessages.add(msgId)
-
-      // limpiar memoria
-      if (processedMessages.size > 1000) {
-        processedMessages.clear()
-      }
-
-      const from = msg.key.remoteJid
-
-      const text =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        ''
-
-      if (!text) return
-
-      const prefix = '.'
-      if (!text.startsWith(prefix)) return
-
-      const args = text.slice(prefix.length).trim().split(/ +/)
-      const commandName = args.shift()?.toLowerCase()
-
-      console.log(`📩 Comando recibido: ${commandName}`)
-
-      const command = commands.get(commandName)
-      if (!command) return
-
       await command.execute(sock, msg, args)
-
     } catch (err) {
-      console.log('❌ Error en mensaje:', err)
+      console.error('❌ Error ejecutando comando:', err)
     }
   })
 
-  // 🔌 CONEXIÓN
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -134,13 +100,10 @@ export async function startSocket() {
 
       console.log('❌ Conexión cerrada:', code)
 
-      currentSocket = null
-
       const shouldReconnect = code !== DisconnectReason.loggedOut
 
       if (shouldReconnect) {
-        console.log('🔄 Reconectando en 3 segundos...')
-        setTimeout(() => startSocket(), 3000)
+        startSocket()
       } else {
         console.log('🚫 Sesión inválida')
       }
