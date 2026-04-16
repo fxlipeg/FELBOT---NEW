@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 🔥 carga comandos simple (sin spam)
+// 🔥 carga comandos (key = nombre en minúscula)
 async function loadCommands() {
   const commands = new Map()
   const dir = path.join(__dirname, '../commands')
@@ -24,12 +24,14 @@ async function loadCommands() {
     try {
       const mod = await import(`../commands/${file}`)
 
-      const name = mod.name || mod.default?.name || file.replace('.js', '')
+      const name =
+        (mod.name || mod.default?.name || file.replace('.js', '')).toLowerCase()
+
       const execute = mod.execute || mod.default?.execute || mod.default
 
-      if (!name || !execute) continue
-
-      commands.set(name.toLowerCase(), { execute })
+      if (typeof execute === 'function') {
+        commands.set(name, execute)
+      }
     } catch {}
   }
 
@@ -58,6 +60,7 @@ export async function startSocket() {
     if (!msg?.message) return
     if (msg.key.fromMe) return
     if (msg.key.remoteJid === 'status@broadcast') return
+    if (msg.messageStubType) return
 
     const from = msg.key.remoteJid
 
@@ -76,12 +79,15 @@ export async function startSocket() {
 
     const command = commands.get(cmd)
 
-    console.log(`📩 ${body}`)
-
+    // 🔥 SOLO LOG SI ES COMANDO
     if (command) {
+      console.log(`⚡ comando: ${cmd}`)
+
       try {
-        await command.execute(sock, msg, args)
-      } catch {}
+        await command(sock, msg, args)
+      } catch (e) {
+        console.log(`❌ error comando ${cmd}`)
+      }
     }
   })
 
@@ -89,7 +95,7 @@ export async function startSocket() {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
-      console.log('📲 Escanea el QR:')
+      console.log('📲 Escanea QR:')
       qrTerm.generate(qr, { small: true })
     }
 
