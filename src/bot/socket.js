@@ -13,14 +13,11 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 🔥 normaliza comandos
-function normalizeCommand(cmd = '') {
-  return cmd.toLowerCase().replace(/[^a-z0-9]/g, '').trim()
-}
-
-// 🔥 carga comandos (simple y estable)
-async function loadCommands(dir) {
+// 🔥 carga comandos simple (sin spam)
+async function loadCommands() {
   const commands = new Map()
+  const dir = path.join(__dirname, '../commands')
+
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
 
   for (const file of files) {
@@ -32,12 +29,8 @@ async function loadCommands(dir) {
 
       if (!name || !execute) continue
 
-      commands.set(normalizeCommand(name), { name, execute })
-
-      console.log(`⚡ Comando cargado: ${name}`)
-    } catch (e) {
-      console.log(`❌ Error cargando ${file}:`, e.message)
-    }
+      commands.set(name.toLowerCase(), { execute })
+    } catch {}
   }
 
   return commands
@@ -48,8 +41,7 @@ export async function startSocket() {
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
 
-  const commandsPath = path.join(__dirname, '../commands')
-  const commands = await loadCommands(commandsPath)
+  const commands = await loadCommands()
 
   const sock = makeWASocket({
     version,
@@ -66,42 +58,30 @@ export async function startSocket() {
     if (!msg?.message) return
     if (msg.key.fromMe) return
     if (msg.key.remoteJid === 'status@broadcast') return
-    if (msg.messageStubType) return
-    if (msg.message?.protocolMessage) return
 
     const from = msg.key.remoteJid
 
-    const rawText =
+    const text =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text ||
       msg.message.imageMessage?.caption ||
       msg.message.videoMessage?.caption ||
-      msg.message.buttonsResponseMessage?.selectedButtonId ||
-      msg.message.listResponseMessage?.singleSelectReply?.selectedRowId ||
       ''
 
-    const body = rawText?.trim()
-    if (!body) return
+    if (!text) return
 
-    const parts = body.split(/ +/)
-    const commandName = normalizeCommand(parts[0])
-    const args = parts.slice(1)
+    const body = text.trim()
+    const args = body.split(/ +/)
+    const cmd = args.shift().toLowerCase()
 
-    if (!commandName) return
+    const command = commands.get(cmd)
 
-    console.log(`📩 Comando recibido: ${commandName}`)
+    console.log(`📩 ${body}`)
 
-    const command = commands.get(commandName)
-
-    if (!command) {
-      console.log(`⚠️ No existe comando: ${commandName}`)
-      return
-    }
-
-    try {
-      await command.execute(sock, msg, args)
-    } catch (err) {
-      console.log(`❌ Error ejecutando ${commandName}:`, err)
+    if (command) {
+      try {
+        await command.execute(sock, msg, args)
+      } catch {}
     }
   })
 
@@ -114,11 +94,12 @@ export async function startSocket() {
     }
 
     if (connection === 'open') {
-      console.log('✅ CONECTADO')
+      console.log('✅ CONECTADO (MONGO)')
     }
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
+
       console.log('❌ Conexión cerrada:', code)
 
       const shouldReconnect = code !== DisconnectReason.loggedOut
