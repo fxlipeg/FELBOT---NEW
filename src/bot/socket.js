@@ -2,11 +2,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   DisconnectReason
 } from '@whiskeysockets/baileys'
-
 import qrTerm from 'qrcode-terminal'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import { useMongoAuthState } from '../mongoAuth.js'
 
 export async function startSocket() {
@@ -23,25 +19,6 @@ export async function startSocket() {
   })
 
   sock.ev.on('creds.update', saveCreds)
-
-  // 📂 COMANDOS
-  const commands = new Map()
-
-  const __filename = fileURLToPath(import.meta.url)
-  const __dirname = path.dirname(__filename)
-
-  const commandsPath = path.join(__dirname, '../commands')
-
-  const files = fs.readdirSync(commandsPath)
-
-  for (const file of files) {
-    if (!file.endsWith('.js')) continue
-
-    const command = await import(`../commands/${file}`)
-    if (command.default?.name) {
-      commands.set(command.default.name, command.default)
-    }
-  }
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
