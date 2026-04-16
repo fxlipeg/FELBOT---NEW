@@ -123,8 +123,4 @@ export async function startSocket() {
   })
 
   return sock
-}git add .
-git commit -m "34"
-git push origin main
-
-
+}
