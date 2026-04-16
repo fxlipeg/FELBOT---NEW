@@ -17,7 +17,7 @@ const processedMessages = new Set()
 
 // 📂 CARGAR COMANDOS
 const commands = new Map()
-const commandsPath = path.join(__dirname, '../comandos')
+const commandsPath = path.join(__dirname, '../commands')
 
 const files = fs.readdirSync(commandsPath)
 
