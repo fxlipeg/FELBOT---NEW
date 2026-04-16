@@ -24,7 +24,7 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // 📂 CARGA DE COMANDOS (SOLO AÑADIDO)
+  // 📂 COMANDOS
   const commands = new Map()
 
   const __filename = fileURLToPath(import.meta.url)
@@ -32,14 +32,16 @@ export async function startSocket() {
 
   const commandsPath = path.join(__dirname, '../commands')
 
-  fs.readdirSync(commandsPath).forEach(async (file) => {
-    if (!file.endsWith('.js')) return
+  const files = fs.readdirSync(commandsPath)
+
+  for (const file of files) {
+    if (!file.endsWith('.js')) continue
 
     const command = await import(`../commands/${file}`)
     if (command.default?.name) {
       commands.set(command.default.name, command.default)
     }
-  })
+  }
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
