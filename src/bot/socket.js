@@ -13,12 +13,17 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// ===============================
-// 🔥 CARGADOR DE COMANDOS (PRO)
-// ===============================
+// ========================================
+// 🔥 LOADER ULTRA BLINDADO (ANTI ERRORES)
+// ========================================
 async function loadCommands() {
   const commands = new Map()
   const dir = path.join(__dirname, '../commands')
+
+  if (!fs.existsSync(dir)) {
+    console.log('❌ Carpeta commands no existe')
+    return commands
+  }
 
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
 
@@ -28,19 +33,26 @@ async function loadCommands() {
       const cmd = mod.default || mod
 
       const execute = cmd.execute || cmd
-      if (typeof execute !== 'function') continue
+      if (typeof execute !== 'function') {
+        console.log(`⚠️ ${file} no exporta función`)
+        continue
+      }
 
-      let names = cmd.name || file.replace('.js', '')
+      let names = cmd.name ?? file.replace('.js', '')
 
-      // 🔥 soporta alias (array)
-      if (Array.isArray(names)) {
-        for (const n of names) {
-          commands.set(n.toLowerCase(), execute)
-          console.log(`✅ Comando cargado: ${n}`)
-        }
-      } else {
-        commands.set(names.toLowerCase(), execute)
-        console.log(`✅ Comando cargado: ${names}`)
+      // 🔥 SIEMPRE ARRAY
+      if (!Array.isArray(names)) names = [names]
+
+      for (let n of names) {
+        if (!n) continue
+
+        // 🔥 FORZAR STRING (CLAVE DEL FIX)
+        n = String(n).toLowerCase().trim()
+
+        if (!n) continue
+
+        commands.set(n, execute)
+        console.log(`✅ Comando cargado: ${n}`)
       }
 
     } catch (err) {
@@ -51,9 +63,9 @@ async function loadCommands() {
   return commands
 }
 
-// ===============================
+// ========================================
 // 🚀 SOCKET PRINCIPAL
-// ===============================
+// ========================================
 export async function startSocket() {
 
   const { state, saveCreds } = await useMongoAuthState()
@@ -71,9 +83,9 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // ===============================
-  // 🧠 HANDLER DE MENSAJES
-  // ===============================
+  // ========================================
+  // 🧠 HANDLER ULTRA PRO
+  // ========================================
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0]
@@ -111,16 +123,17 @@ export async function startSocket() {
 
       console.log(`⚡ comando: ${cmd}`)
 
-      // ===============================
+      // ========================================
       // 🧠 CONTEXTO UNIVERSAL
-      // ===============================
+      // ========================================
+      const sender = msg.key.participant || msg.key.remoteJid
+
       const context = {
         sock,
         msg,
         from,
         args,
-
-        sender: msg.key.participant || msg.key.remoteJid,
+        sender,
 
         reply: (text) =>
           sock.sendMessage(from, { text }, { quoted: msg }),
@@ -138,9 +151,9 @@ export async function startSocket() {
     }
   })
 
-  // ===============================
+  // ========================================
   // 🔌 CONEXIÓN
-  // ===============================
+  // ========================================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
