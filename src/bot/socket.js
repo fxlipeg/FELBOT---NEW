@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 🔥 carga comandos (key = nombre en minúscula)
+// 🔥 CARGAR COMANDOS
 async function loadCommands() {
   const commands = new Map()
   const dir = path.join(__dirname, '../commands')
@@ -32,7 +32,10 @@ async function loadCommands() {
       if (typeof execute === 'function') {
         commands.set(name, execute)
       }
-    } catch {}
+
+    } catch (err) {
+      console.log(`❌ Error cargando ${file}`, err)
+    }
   }
 
   return commands
@@ -55,42 +58,70 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // 🧠 HANDLER DE MENSAJES
   sock.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages?.[0]
-    if (!msg?.message) return
-    if (msg.key.fromMe) return
-    if (msg.key.remoteJid === 'status@broadcast') return
-    if (msg.messageStubType) return
+    try {
+      const msg = messages?.[0]
+      if (!msg?.message) return
+      if (msg.key.fromMe) return
+      if (msg.key.remoteJid === 'status@broadcast') return
+      if (msg.messageStubType) return
 
-    const from = msg.key.remoteJid
+      const from = msg.key.remoteJid
 
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      msg.message.imageMessage?.caption ||
-      msg.message.videoMessage?.caption ||
-      ''
+      const text =
+        msg.message.conversation ||
+        msg.message.extendedTextMessage?.text ||
+        msg.message.imageMessage?.caption ||
+        msg.message.videoMessage?.caption ||
+        ''
 
-    if (!text) return
+      if (!text) return
 
-    const body = text.trim()
-    const args = body.split(/ +/)
-    const cmd = args.shift().toLowerCase()
+      const body = text.trim()
 
-    const command = commands.get(cmd)
+      // 👉 prefijos
+      const prefixes = ['.', '!', '/']
+      const prefix = prefixes.find(p => body.startsWith(p))
+      if (!prefix) return
 
-    // 🔥 SOLO LOG SI ES COMANDO
-    if (command) {
+      const withoutPrefix = body.slice(prefix.length).trim()
+      const args = withoutPrefix.split(/ +/)
+      const cmd = args.shift()?.toLowerCase()
+
+      if (!cmd) return
+
+      const command = commands.get(cmd)
+      if (!command) return
+
       console.log(`⚡ comando: ${cmd}`)
 
-      try {
-        await command(sock, msg, args)
-      } catch (e) {
-        console.log(`❌ error comando ${cmd}`)
+      // 🔥 CONTEXTO UNIVERSAL
+      const context = {
+        sock,
+        msg,
+        from,
+        args,
+
+        sender: msg.key.participant || msg.key.remoteJid,
+
+        reply: (text) =>
+          sock.sendMessage(from, { text }, { quoted: msg }),
+
+        react: (emoji) =>
+          sock.sendMessage(from, {
+            react: { text: emoji, key: msg.key }
+          })
       }
+
+      await command(context)
+
+    } catch (err) {
+      console.log('❌ Error en handler:', err)
     }
   })
 
+  // 🔌 CONEXIÓN
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -110,8 +141,12 @@ export async function startSocket() {
 
       const shouldReconnect = code !== DisconnectReason.loggedOut
 
-      if (shouldReconnect) startSocket()
-      else console.log('🚫 Sesión inválida')
+      if (shouldReconnect) {
+        console.log('🔄 Reintentando conexión...')
+        startSocket()
+      } else {
+        console.log('🚫 Sesión inválida, vuelve a escanear QR')
+      }
     }
   })
 
