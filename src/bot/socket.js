@@ -3,106 +3,71 @@ import makeWASocket, {
   DisconnectReason
 } from '@whiskeysockets/baileys'
 
-import qrTerm from 'qrcode-terminal'
 import { useMongoAuthState } from '../mongoAuth.js'
-import Session from '../models/session.js'
-import { startMessageHandler } from '../handlers/messageHandler.js'
+import { startMessageHandler } from './handler.js'
 
-// 🔥 CONTROL GLOBAL
 let sock = null
-let isStarting = false
-let isConnected = false
+let isConnecting = false
 
 export async function startSocket() {
 
-  // 🛑 evitar duplicados
-  if (sock && isConnected) {
-    console.log('🟢 Socket ya activo, no se crea otro')
-    return sock
-  }
-
-  if (isStarting) {
-    console.log('⏳ Socket en proceso...')
+  // 🚫 EVITA MULTI INSTANCIAS
+  if (isConnecting) {
+    console.log('⚠️ Ya se está conectando, evitando duplicado...')
     return
   }
 
-  isStarting = true
+  if (sock) {
+    console.log('⚠️ Ya existe un socket activo')
+    return
+  }
+
+  isConnecting = true
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
 
-  const newSock = makeWASocket({
+  sock = makeWASocket({
     version,
     auth: state,
-    printQRInTerminal: false,
-    markOnlineOnConnect: false
+    printQRInTerminal: true,
+    browser: ['Ubuntu', 'Chrome', '20.0.04']
   })
 
-  sock = newSock
+  sock.ev.on('creds.update', saveCreds)
 
-  newSock.ev.on('creds.update', saveCreds)
-
-  newSock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update
-
-    if (qr) {
-      console.log('📲 Escanea QR:')
-      qrTerm.generate(qr, { small: true })
-    }
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update
 
     if (connection === 'open') {
       console.log('✅ CONECTADO')
+      isConnecting = false
 
-      isConnected = true
-      isStarting = false
-
-      await startMessageHandler(newSock)
+      // 🧠 SOLO UNA VEZ
+      startMessageHandler(sock)
     }
 
     if (connection === 'close') {
-      const code = lastDisconnect?.error?.output?.statusCode
+      const statusCode = lastDisconnect?.error?.output?.statusCode
 
-      console.log('❌ Conexión cerrada:', code)
+      console.log(`❌ Conexión cerrada: ${statusCode}`)
 
-      isConnected = false
+      sock = null
+      isConnecting = false
 
-      // 🔴 SESIÓN INVÁLIDA
-      if (code === 401) {
-        console.log('🧹 sesión inválida → borrando auth')
-
-        await Session.deleteOne({ _id: 'auth' })
-
-        sock = null
-        isStarting = false
-
-        return setTimeout(() => startSocket(), 3000)
-      }
-
-      // 🟡 CONFLICT (NO BUCLE)
-      if (code === 440) {
-        console.log('⚠️ conflicto detectado')
-
-        // esperar a ver si hay socket vivo
-        setTimeout(() => {
-          if (!sock || !isConnected) {
-            console.log('🔄 no hay socket activo → reconectando')
-            sock = null
-            isStarting = false
-            startSocket()
-          } else {
-            console.log('🟢 otro socket ya está activo, no hago nada')
-          }
-        }, 8000)
-
+      // 🚫 NO RECONEXIÓN EN CONFLICTO
+      if (statusCode === 440) {
+        console.log('🚫 conflicto → NO reconectar')
         return
       }
 
-      // 🔁 RECONEXIÓN NORMAL
-      console.log('🔄 reconexión normal...')
+      if (statusCode === DisconnectReason.loggedOut) {
+        console.log('🚫 sesión cerrada → escanea QR')
+        return
+      }
 
-      sock = null
-      isStarting = false
-
+      // ✅ RECONEXIÓN CONTROLADA
+      console.log('🔄 Reconectando en 5s...')
       setTimeout(() => startSocket(), 5000)
     }
   })
