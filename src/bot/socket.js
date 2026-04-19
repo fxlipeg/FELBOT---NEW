@@ -15,14 +15,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // ===============================
-// 🔥 LOADER BLINDADO
+// 🔥 LOADER (SOPORTA execute + reacciones)
 // ===============================
 async function loadCommands() {
   const commands = new Map()
+  const reactions = []
+
   const dir = path.join(__dirname, '../commands')
-
-  if (!fs.existsSync(dir)) return commands
-
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
 
   for (const file of files) {
@@ -30,20 +29,22 @@ async function loadCommands() {
       const mod = await import(`../commands/${file}`)
       const cmd = mod.default || mod
 
-      const execute = cmd.execute || cmd
-      if (typeof execute !== 'function') continue
+      // 🔹 comandos normales
+      if (cmd.name) {
+        let names = cmd.name
+        if (!Array.isArray(names)) names = [names]
 
-      let names = cmd.name ?? file.replace('.js', '')
+        for (let n of names) {
+          n = String(n).toLowerCase()
+          commands.set(n, cmd)
+          console.log(`✅ Comando cargado: ${n}`)
+        }
+      }
 
-      if (!Array.isArray(names)) names = [names]
-
-      for (let n of names) {
-        if (!n) continue
-        n = String(n).toLowerCase().trim()
-        if (!n) continue
-
-        commands.set(n, execute)
-        console.log(`✅ Comando cargado: ${n}`)
+      // 🔥 handler de reacciones (VS)
+      if (mod.handleReaccion) {
+        reactions.push(mod.handleReaccion)
+        console.log(`⚡ Handler reacción cargado: ${file}`)
       }
 
     } catch (err) {
@@ -51,7 +52,7 @@ async function loadCommands() {
     }
   }
 
-  return commands
+  return { commands, reactions }
 }
 
 // ===============================
@@ -63,31 +64,40 @@ export async function startSocket() {
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
-  const commands = await loadCommands()
+
+  const { commands, reactions } = await loadCommands()
 
   const sock = makeWASocket({
     version,
     auth: state,
-    printQRInTerminal: false,
-    markOnlineOnConnect: false,
-    syncFullHistory: false
+    printQRInTerminal: false
   })
 
   sock.ev.on('creds.update', saveCreds)
 
   // ===============================
-  // 🧠 HANDLER MENSAJES
+  // 🧠 MENSAJES
   // ===============================
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0]
       if (!msg?.message) return
       if (msg.key.fromMe) return
-      if (msg.key.remoteJid === 'status@broadcast') return
-      if (msg.messageStubType) return
 
       const from = msg.key.remoteJid
 
+      // ===============================
+      // 🔥 REACCIONES (VS.JS)
+      // ===============================
+      for (const handler of reactions) {
+        try {
+          await handler(sock, msg, from)
+        } catch {}
+      }
+
+      // ===============================
+      // 📩 TEXTO
+      // ===============================
       const text =
         msg.message.conversation ||
         msg.message.extendedTextMessage?.text ||
@@ -99,21 +109,20 @@ export async function startSocket() {
 
       const body = text.trim()
 
-      // 🔥 FIX PREFIX (CORRECTO)
       const prefixes = ['.', '!', '/']
       const prefix = prefixes.find(p => body.startsWith(p))
       if (!prefix) return
 
       const withoutPrefix = body.slice(prefix.length).trim()
       const args = withoutPrefix.split(/ +/)
-      const cmd = args.shift()?.toLowerCase()
+      const cmdName = args.shift()?.toLowerCase()
 
-      if (!cmd) return
+      if (!cmdName) return
 
-      const command = commands.get(cmd)
+      const command = commands.get(cmdName)
       if (!command) return
 
-      console.log(`⚡ comando: ${cmd}`)
+      console.log(`⚡ comando: ${cmdName}`)
 
       const sender = msg.key.participant || msg.key.remoteJid
 
@@ -123,6 +132,7 @@ export async function startSocket() {
         from,
         args,
         sender,
+        command: cmdName, // 🔥 CLAVE PARA VS.JS
 
         reply: (text) =>
           sock.sendMessage(from, { text }, { quoted: msg }),
@@ -133,7 +143,12 @@ export async function startSocket() {
           })
       }
 
-      await command(context)
+      // 🔥 EJECUCIÓN COMPATIBLE
+      if (typeof command.execute === 'function') {
+        await command.execute(context)
+      } else if (typeof command === 'function') {
+        await command(context)
+      }
 
     } catch (err) {
       console.log('❌ Error handler:', err)
@@ -141,7 +156,7 @@ export async function startSocket() {
   })
 
   // ===============================
-  // 🔌 CONEXIÓN (ANTI LOOP + QR FIX)
+  // 🔌 CONEXIÓN
   // ===============================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
@@ -152,45 +167,31 @@ export async function startSocket() {
     }
 
     if (connection === 'open') {
-      console.log('✅ CONECTADO (MONGO)')
+      console.log('✅ CONECTADO')
       reconnecting = false
     }
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
-
       console.log('❌ Conexión cerrada:', code)
 
-      // 💣 SESIÓN ROTA
       if (code === 401) {
-        console.log('🧹 Eliminando sesión corrupta...')
         await Session.deleteOne({ _id: 'auth' })
-
-        console.log('🔄 Reiniciando para QR...')
-        setTimeout(() => startSocket(), 2000)
-        return
+        console.log('🧹 sesión borrada')
+        return startSocket()
       }
 
-      // 🚫 conflicto
       if (code === 440) {
-        console.log('🚫 Sesión reemplazada (conflict)')
-        return
-      }
-
-      // 🚫 logout
-      if (code === DisconnectReason.loggedOut) {
-        console.log('🚫 Sesión cerrada → necesitas QR')
+        console.log('🚫 conflicto (otra sesión abierta)')
         return
       }
 
       if (reconnecting) return
       reconnecting = true
 
-      console.log('🔄 Reconectando...')
-
       setTimeout(() => startSocket(), 3000)
     }
   })
 
   return sock
-}//
+}
