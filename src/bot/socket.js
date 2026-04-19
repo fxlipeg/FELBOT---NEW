@@ -14,8 +14,11 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// 🧠 evitar duplicados
+const processedMessages = new Set()
+
 // ===============================
-// 🔥 LOADER (SOPORTA execute + reacciones)
+// 🔥 LOADER
 // ===============================
 async function loadCommands() {
   const commands = new Map()
@@ -29,22 +32,22 @@ async function loadCommands() {
       const mod = await import(`../commands/${file}`)
       const cmd = mod.default || mod
 
-      // 🔹 comandos normales
+      // comandos
       if (cmd.name) {
         let names = cmd.name
         if (!Array.isArray(names)) names = [names]
 
         for (let n of names) {
-          n = String(n).toLowerCase()
+          n = String(n).toLowerCase().trim()
           commands.set(n, cmd)
           console.log(`✅ Comando cargado: ${n}`)
         }
       }
 
-      // 🔥 handler de reacciones (VS)
+      // 🔥 reacciones (vs.js)
       if (mod.handleReaccion) {
         reactions.push(mod.handleReaccion)
-        console.log(`⚡ Handler reacción cargado: ${file}`)
+        console.log(`⚡ Handler reacción: ${file}`)
       }
 
     } catch (err) {
@@ -76,18 +79,29 @@ export async function startSocket() {
   sock.ev.on('creds.update', saveCreds)
 
   // ===============================
-  // 🧠 MENSAJES
+  // 📩 MENSAJES
   // ===============================
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0]
       if (!msg?.message) return
       if (msg.key.fromMe) return
+      if (msg.key.remoteJid === 'status@broadcast') return
+
+      const msgId = msg.key.id
+
+      // 🔥 ANTI DUPLICADOS
+      if (processedMessages.has(msgId)) return
+      processedMessages.add(msgId)
+
+      setTimeout(() => {
+        processedMessages.delete(msgId)
+      }, 5000)
 
       const from = msg.key.remoteJid
 
       // ===============================
-      // 🔥 REACCIONES (VS.JS)
+      // 🔥 REACCIONES (VS)
       // ===============================
       for (const handler of reactions) {
         try {
@@ -96,7 +110,7 @@ export async function startSocket() {
       }
 
       // ===============================
-      // 📩 TEXTO
+      // 🧠 TEXTO
       // ===============================
       const text =
         msg.message.conversation ||
@@ -132,7 +146,7 @@ export async function startSocket() {
         from,
         args,
         sender,
-        command: cmdName, // 🔥 CLAVE PARA VS.JS
+        command: cmdName,
 
         reply: (text) =>
           sock.sendMessage(from, { text }, { quoted: msg }),
@@ -143,7 +157,7 @@ export async function startSocket() {
           })
       }
 
-      // 🔥 EJECUCIÓN COMPATIBLE
+      // 🔥 EJECUCIÓN CORRECTA
       if (typeof command.execute === 'function') {
         await command.execute(context)
       } else if (typeof command === 'function') {
@@ -175,14 +189,16 @@ export async function startSocket() {
       const code = lastDisconnect?.error?.output?.statusCode
       console.log('❌ Conexión cerrada:', code)
 
+      // 🔥 sesión rota
       if (code === 401) {
         await Session.deleteOne({ _id: 'auth' })
-        console.log('🧹 sesión borrada')
+        console.log('🧹 sesión eliminada')
         return startSocket()
       }
 
+      // 🚫 conflicto
       if (code === 440) {
-        console.log('🚫 conflicto (otra sesión abierta)')
+        console.log('🚫 otra sesión activa')
         return
       }
 
