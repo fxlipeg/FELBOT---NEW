@@ -99,8 +99,9 @@ export async function startSocket() {
 
       const body = text.trim()
 
+      // 🔥 FIX PREFIX (CORRECTO)
       const prefixes = ['.', '!', '/']
-      const prefix = prefixes.find(p => body.startsWith(prefix))
+      const prefix = prefixes.find(p => body.startsWith(p))
       if (!prefix) return
 
       const withoutPrefix = body.slice(prefix.length).trim()
@@ -140,7 +141,7 @@ export async function startSocket() {
   })
 
   // ===============================
-  // 🔌 CONEXIÓN (ANTI LOOP + FIX QR)
+  // 🔌 CONEXIÓN (ANTI LOOP + QR FIX)
   // ===============================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
@@ -160,7 +161,7 @@ export async function startSocket() {
 
       console.log('❌ Conexión cerrada:', code)
 
-      // 💣 SESIÓN ROTA → BORRAR Y REGENERAR QR
+      // 💣 SESIÓN ROTA
       if (code === 401) {
         console.log('🧹 Eliminando sesión corrupta...')
         await Session.deleteOne({ _id: 'auth' })
@@ -176,7 +177,7 @@ export async function startSocket() {
         return
       }
 
-      // 🚫 logout manual
+      // 🚫 logout
       if (code === DisconnectReason.loggedOut) {
         console.log('🚫 Sesión cerrada → necesitas QR')
         return
