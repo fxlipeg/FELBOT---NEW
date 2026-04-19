@@ -13,17 +13,14 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// ========================================
-// 🔥 LOADER ULTRA BLINDADO (ANTI ERRORES)
-// ========================================
+// ===============================
+// 🔥 LOADER BLINDADO
+// ===============================
 async function loadCommands() {
   const commands = new Map()
   const dir = path.join(__dirname, '../commands')
 
-  if (!fs.existsSync(dir)) {
-    console.log('❌ Carpeta commands no existe')
-    return commands
-  }
+  if (!fs.existsSync(dir)) return commands
 
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
 
@@ -33,22 +30,15 @@ async function loadCommands() {
       const cmd = mod.default || mod
 
       const execute = cmd.execute || cmd
-      if (typeof execute !== 'function') {
-        console.log(`⚠️ ${file} no exporta función`)
-        continue
-      }
+      if (typeof execute !== 'function') continue
 
       let names = cmd.name ?? file.replace('.js', '')
 
-      // 🔥 SIEMPRE ARRAY
       if (!Array.isArray(names)) names = [names]
 
       for (let n of names) {
         if (!n) continue
-
-        // 🔥 FORZAR STRING (CLAVE DEL FIX)
         n = String(n).toLowerCase().trim()
-
         if (!n) continue
 
         commands.set(n, execute)
@@ -63,9 +53,11 @@ async function loadCommands() {
   return commands
 }
 
-// ========================================
-// 🚀 SOCKET PRINCIPAL
-// ========================================
+// ===============================
+// 🚀 SOCKET
+// ===============================
+let reconnecting = false
+
 export async function startSocket() {
 
   const { state, saveCreds } = await useMongoAuthState()
@@ -83,9 +75,9 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // ========================================
-  // 🧠 HANDLER ULTRA PRO
-  // ========================================
+  // ===============================
+  // 🧠 HANDLER MENSAJES
+  // ===============================
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0]
@@ -107,7 +99,6 @@ export async function startSocket() {
 
       const body = text.trim()
 
-      // 🔥 PREFIJOS
       const prefixes = ['.', '!', '/']
       const prefix = prefixes.find(p => body.startsWith(p))
       if (!prefix) return
@@ -123,9 +114,6 @@ export async function startSocket() {
 
       console.log(`⚡ comando: ${cmd}`)
 
-      // ========================================
-      // 🧠 CONTEXTO UNIVERSAL
-      // ========================================
       const sender = msg.key.participant || msg.key.remoteJid
 
       const context = {
@@ -147,13 +135,13 @@ export async function startSocket() {
       await command(context)
 
     } catch (err) {
-      console.log('❌ Error en handler:', err)
+      console.log('❌ Error handler:', err)
     }
   })
 
-  // ========================================
-  // 🔌 CONEXIÓN
-  // ========================================
+  // ===============================
+  // 🔌 CONEXIÓN (ANTI LOOP)
+  // ===============================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -164,6 +152,7 @@ export async function startSocket() {
 
     if (connection === 'open') {
       console.log('✅ CONECTADO (MONGO)')
+      reconnecting = false
     }
 
     if (connection === 'close') {
@@ -171,16 +160,29 @@ export async function startSocket() {
 
       console.log('❌ Conexión cerrada:', code)
 
-      const shouldReconnect = code !== DisconnectReason.loggedOut
-
-      if (shouldReconnect) {
-        console.log('🔄 Reconectando...')
-        startSocket()
-      } else {
-        console.log('🚫 Sesión inválida, vuelve a escanear QR')
+      // 🚫 NO REINTENTAR (CLAVE)
+      if (code === 440) {
+        console.log('🚫 Sesión reemplazada (conflict)')
+        reconnecting = false
+        return
       }
+
+      if (code === DisconnectReason.loggedOut) {
+        console.log('🚫 Sesión cerrada → necesitas QR')
+        reconnecting = false
+        return
+      }
+
+      if (reconnecting) return
+      reconnecting = true
+
+      console.log('🔄 Reconectando en 3s...')
+
+      setTimeout(() => {
+        startSocket()
+      }, 3000)
     }
   })
 
   return sock
-}//j
+}

@@ -3,16 +3,28 @@ import { initAuthCreds, BufferJSON } from '@whiskeysockets/baileys'
 
 export const useMongoAuthState = async () => {
 
-  const session = await Session.findById('auth')
+  let session = await Session.findById('auth')
 
   let creds, keys = {}
 
-  if (session?.data) {
+  // 🧠 SI NO HAY SESIÓN → CREAR NUEVA Y GUARDARLA
+  if (!session) {
+    console.log('📲 No hay sesión en Mongo → creando nueva (QR)')
+
+    creds = initAuthCreds()
+    keys = {}
+
+    const data = JSON.parse(JSON.stringify({ creds, keys }, BufferJSON.replacer))
+
+    await Session.create({
+      _id: 'auth',
+      data
+    })
+
+  } else {
     const data = JSON.parse(JSON.stringify(session.data), BufferJSON.reviver)
     creds = data.creds
     keys = data.keys || {}
-  } else {
-    creds = initAuthCreds()
   }
 
   const saveCreds = async () => {
@@ -21,7 +33,7 @@ export const useMongoAuthState = async () => {
     await Session.findByIdAndUpdate(
       'auth',
       { data },
-      { upsert: true, returnDocument: 'after' }
+      { upsert: true }
     )
   }
 
