@@ -2,6 +2,7 @@ import fs from 'fs'
 import { antiLink } from '../events/antiLink.js'
 import { modoAdmin } from '../events/modoadmin.js'
 import { handleReaccion } from '../commands/vs.js'
+ import { handleTres, handleMove } from '../commands/tres.js'
 
 // 🔇 SISTEMA MUTE GLOBAL
 global.muted = global.muted || {}
@@ -94,6 +95,10 @@ export async function startMessageHandler(sock) {
 
     // 🔥 REACCIONES (VS)
     await handleReaccion(sock, msg, from)
+
+
+await handleTres(sock, msg, from)
+await handleMove(sock, msg, text, from)
 
     let metadata = null
     let participants = []

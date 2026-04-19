@@ -70,13 +70,16 @@ export async function startSocket() {
         return startSocket()
       }
 
-      // 🔴 CONFLICT → NO RECONEXIÓN
-      if (code === 440) {
-        console.log('🚫 conflicto detectado → evitando reconexión')
-        sock = null
-        starting = false
-        return
-      }
+    if (code === 440) {
+  console.log('⚠️ conflicto → reiniciando socket limpio')
+
+  sock.ev.removeAllListeners() // 💥 clave
+  sock = null
+  starting = false
+
+  setTimeout(() => startSocket(), 3000)
+  return
+}
 
       // 🔁 reconexión normal
       console.log('🔄 reconectando...')

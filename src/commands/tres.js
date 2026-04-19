@@ -1,197 +1,147 @@
 const partidas = {}
 
 export default {
-  name: ['tres', 'ttt'],
+  name: 'tres',
 
-  async execute({ sock, from, msg, sender }) {
-
-    if (partidas[from]) {
-      return sock.sendMessage(from, {
-        text: '❌ Ya hay una partida activa.'
-      }, { quoted: msg })
-    }
-
-    partidas[from] = {
-      board: Array(9).fill(null),
-      players: [],
-      turn: null,
-      symbols: {},
-      messageKey: null,
-      started: false,
-      timer: null
-    }
+  async execute({ sock, from, msg }) {
 
     const sent = await sock.sendMessage(from, {
-      text: render(partidas[from])
+      text: render(null)
     }, { quoted: msg })
 
-    partidas[from].messageKey = sent.key
+    partidas[from] = {
+      players: [],
+      turn: 0,
+      board: Array(9).fill(null),
+      key: sent.key
+    }
   }
 }
 
-// ===============================
-// 🔥 HANDLER AUTOMÁTICO
-// ===============================
-export async function autoTresHandler(sock, msg, from) {
-
-  const text =
-    msg.message?.conversation ||
-    msg.message?.extendedTextMessage?.text ||
-    ''
+// ❤️ JOIN POR REACCIÓN
+export async function handleTres(sock, msg, from) {
 
   const game = partidas[from]
   if (!game) return
 
+  const reaction = msg.message?.reactionMessage
+  if (!reaction) return
+
+  if (reaction.text !== '❤️') return
+  if (reaction.key.id !== game.key.id) return
+
   const user = msg.key.participant || msg.key.remoteJid
 
-  // ===============================
-  // 🟢 UNIRSE (join)
-  // ===============================
-  if (text.toLowerCase() === 'join') {
+  if (game.players.includes(user)) return
+  if (game.players.length >= 2) return
 
-    if (game.players.includes(user)) return
+  game.players.push(user)
 
-    if (game.players.length >= 2) {
-      return sock.sendMessage(from, {
-        text: '❌ La partida ya está llena.'
-      })
-    }
-
-    game.players.push(user)
-
-    // iniciar partida
-    if (game.players.length === 2) {
-      game.started = true
-      game.turn = game.players[0]
-      game.symbols[game.players[0]] = '❌'
-      game.symbols[game.players[1]] = '⭕'
-      startTimer(sock, from, game)
-    }
-
-    return actualizar(sock, from, game)
+  if (game.players.length === 2) {
+    game.turn = 0
   }
 
-  // ===============================
-  // 🎯 SOLO RESPUESTAS AL MENSAJE
-  // ===============================
-  const context = msg.message?.extendedTextMessage?.contextInfo
+  await update(sock, from, game)
+}
 
-  if (!context?.stanzaId) return
+// 🎮 JUGADA
+export async function handleMove(sock, msg, text, from) {
 
-  if (context.stanzaId !== game.messageKey.id) return
+  const game = partidas[from]
+  if (!game) return
 
-  if (!/^[1-9]$/.test(text)) return
+  if (!msg.message?.extendedTextMessage?.contextInfo?.stanzaId) return
 
-  if (!game.started) return
+  const replyId = msg.message.extendedTextMessage.contextInfo.stanzaId
+  if (replyId !== game.key.id) return
 
-  // 🔒 SOLO JUGADORES
+  const user = msg.key.participant || msg.key.remoteJid
+
   if (!game.players.includes(user)) return
 
-  // ⛔ turno
-  if (user !== game.turn) return
+  if (game.players[game.turn] !== user) return
 
   const pos = parseInt(text) - 1
+  if (pos < 0 || pos > 8) return
+
   if (game.board[pos]) return
 
-  game.board[pos] = game.symbols[user]
+  game.board[pos] = game.turn === 0 ? '❌' : '⭕'
 
-  clearTimeout(game.timer)
-
-  const win = checkWin(game.board)
-
-  let end = ''
+  // 🔥 win check
+  const win = check(game.board)
 
   if (win) {
-    end = `\n\n🏆 Ganador: @${user.split('@')[0]}`
+    await sock.sendMessage(from, {
+      text: render(game, `${game.board[pos]} GANÓ 🎉`)
+    })
     delete partidas[from]
-  } else if (!game.board.includes(null)) {
-    end = '\n\n🤝 Empate'
-    delete partidas[from]
-  } else {
-    const next = game.players.find(p => p !== user)
-    game.turn = next
-    startTimer(sock, from, game)
+    return
   }
 
-  await actualizar(sock, from, game, end)
-}
-
-// ===============================
-// ⏱️ TIMER
-// ===============================
-function startTimer(sock, from, game) {
-
-  game.timer = setTimeout(async () => {
-
-    const loser = game.turn
-    const winner = game.players.find(p => p !== loser)
-
-    delete partidas[from]
-
+  if (game.board.every(x => x)) {
     await sock.sendMessage(from, {
-      text: `⏰ Tiempo agotado\n🏆 Gana: @${winner.split('@')[0]}`,
-      mentions: [winner]
+      text: render(game, 'EMPATE 🤝')
     })
+    delete partidas[from]
+    return
+  }
 
-  }, 20000)
+  game.turn = game.turn === 0 ? 1 : 0
+
+  await update(sock, from, game)
 }
 
-// ===============================
-// 🧠 RENDER
-// ===============================
-function render(game) {
+// 🧠 RENDER BONITO
+function render(game, extra = '') {
 
-  const b = game.board.map((v, i) => v || `${i + 1}`)
+  const cell = (i) => game?.board[i] || `${i+1}`
 
   return `
-🎮 *TRES EN RAYA*
+╭━━━〔 🎮 3 EN RAYA 〕━━━╮
 
-${b[0]} | ${b[1]} | ${b[2]}
-${b[3]} | ${b[4]} | ${b[5]}
-${b[6]} | ${b[7]} | ${b[8]}
+🎯 Jugadores:
+${game?.players[0] ? `❌ @${game.players[0].split('@')[0]}` : '❌ vacío'}
+${game?.players[1] ? `⭕ @${game.players[1].split('@')[0]}` : '⭕ vacío'}
 
-${
-  !game.started
-    ? `👥 Escribe *join* para jugar (${game.players.length}/2)`
-    : `🎯 Turno: @${game.turn.split('@')[0]}`
-}
+${game?.players.length === 2 ? `🎲 Turno: ${game.turn === 0 ? '❌' : '⭕'} @${game.players[game.turn].split('@')[0]}` : '❤️ Esperando jugadores...'}
+
+┏━━━┳━━━┳━━━┓
+┃ ${cell(0)} ┃ ${cell(1)} ┃ ${cell(2)} ┃
+┣━━━╋━━━╋━━━┫
+┃ ${cell(3)} ┃ ${cell(4)} ┃ ${cell(5)} ┃
+┣━━━╋━━━╋━━━┫
+┃ ${cell(6)} ┃ ${cell(7)} ┃ ${cell(8)} ┃
+┗━━━┻━━━┻━━━┛
+
+${extra || '❤️ Reacciona para unirte\nResponde con número (1-9)'}
 `.trim()
 }
 
-// ===============================
-// 🔄 EDITAR
-// ===============================
-async function actualizar(sock, from, game, extra = '') {
-
-  const text = render(game) + extra
+// 🔄 UPDATE (EDIT)
+async function update(sock, from, game) {
 
   try {
     await sock.sendMessage(from, {
-      text,
-      edit: game.messageKey,
+      text: render(game),
+      edit: game.key,
       mentions: game.players
     })
   } catch {
-    const msg = await sock.sendMessage(from, {
-      text,
+    const m = await sock.sendMessage(from, {
+      text: render(game),
       mentions: game.players
     })
-    game.messageKey = msg.key
+    game.key = m.key
   }
 }
 
-// ===============================
-// 🏆 WIN
-// ===============================
-function checkWin(b) {
-  const combos = [
+// 🏆 WIN LOGIC
+function check(b) {
+  const w = [
     [0,1,2],[3,4,5],[6,7,8],
     [0,3,6],[1,4,7],[2,5,8],
     [0,4,8],[2,4,6]
   ]
-
-  return combos.some(([a,b1,c]) =>
-    b[a] && b[a] === b[b1] && b[a] === b[c]
-  )
+  return w.some(([a,b1,c]) => b[a] && b[a] === b[b1] && b[a] === b[c])
 }
-
