@@ -4,7 +4,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 
 import { useMongoAuthState } from '../mongoAuth.js'
-import { startMessageHandler } from './handler.js'
+import { startMessageHandler } from '../handler/messageHandler.js'
 
 let sock = null
 let isConnecting = false
