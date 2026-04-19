@@ -195,4 +195,3 @@ function checkWin(b) {
   )
 }
 
-export { autoTresHandler }

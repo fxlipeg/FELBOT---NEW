@@ -3,31 +3,21 @@ import { initAuthCreds, BufferJSON } from '@whiskeysockets/baileys'
 
 export const useMongoAuthState = async () => {
 
-  let session = await Session.findById('auth')
+  const session = await Session.findById('auth')
 
-  let creds, keys = {}
+  let creds = initAuthCreds()
+  let keys = {}
 
-  if (!session) {
-    console.log('📲 Nueva sesión → QR requerido')
-
-    creds = initAuthCreds()
-    keys = {}
-
-    const data = JSON.parse(JSON.stringify({ creds, keys }, BufferJSON.replacer))
-
-    await Session.create({
-      _id: 'auth',
-      data
-    })
-
-  } else {
+  if (session?.data) {
     const data = JSON.parse(JSON.stringify(session.data), BufferJSON.reviver)
     creds = data.creds
     keys = data.keys || {}
   }
 
   const saveCreds = async () => {
-    const data = JSON.parse(JSON.stringify({ creds, keys }, BufferJSON.replacer))
+    const data = JSON.parse(
+      JSON.stringify({ creds, keys }, BufferJSON.replacer)
+    )
 
     await Session.findByIdAndUpdate(
       'auth',
@@ -42,10 +32,13 @@ export const useMongoAuthState = async () => {
       keys: {
         get: (type, ids) => {
           const data = keys[type] || {}
-          return ids.reduce((acc, id) => {
-            if (data[id]) acc[id] = data[id]
-            return acc
-          }, {})
+          const result = {}
+
+          for (const id of ids) {
+            if (data[id]) result[id] = data[id]
+          }
+
+          return result
         },
         set: (data) => {
           for (const type in data) {
