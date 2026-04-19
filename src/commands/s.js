@@ -11,7 +11,7 @@ export default {
 
       if (!quoted) {
         return await sock.sendMessage(from, {
-          text: "❌ Responde a una imagen o video con *.fts*"
+          text: "❌ Responde a una imagen o video con *.s*"
         }, { quoted: msg });
       }
 
