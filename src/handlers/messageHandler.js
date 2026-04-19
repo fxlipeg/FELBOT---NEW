@@ -6,6 +6,9 @@ import { handleReaccion } from '../commands/vs.js'
 // 🔇 SISTEMA MUTE GLOBAL
 global.muted = global.muted || {}
 
+// 🔥 ANTI DUPLICADOS
+const processedMessages = new Set()
+
 const commands = new Map()
 
 const loadCommands = async () => {
@@ -19,11 +22,11 @@ const loadCommands = async () => {
 
       if (Array.isArray(cmd.default.name)) {
         for (const name of cmd.default.name) {
-          commands.set(name, cmd.default)
+          commands.set(name.toLowerCase(), cmd.default)
           console.log(`✅ Comando cargado: ${name}`)
         }
       } else {
-        commands.set(cmd.default.name, cmd.default)
+        commands.set(cmd.default.name.toLowerCase(), cmd.default)
         console.log(`✅ Comando cargado: ${cmd.default.name}`)
       }
 
@@ -43,6 +46,16 @@ export async function startMessageHandler(sock) {
 
     const msg = messages[0]
     if (!msg.message || msg.key.fromMe) return
+
+    const msgId = msg.key.id
+
+    // 🔥 EVITA DOBLE EJECUCIÓN
+    if (processedMessages.has(msgId)) return
+    processedMessages.add(msgId)
+
+    setTimeout(() => {
+      processedMessages.delete(msgId)
+    }, 5000)
 
     const getText = (msg) => {
       const m = msg.message
@@ -64,7 +77,7 @@ export async function startMessageHandler(sock) {
 
     const clean = (jid) => jid?.split('@')[0]
 
-    // 🔇 BLOQUEO DE MUTEADOS
+    // 🔇 MUTE
     if (isGroup && global.muted[from]?.includes(sender)) {
       try {
         await sock.sendMessage(from, {
@@ -75,13 +88,11 @@ export async function startMessageHandler(sock) {
             participant: sender
           }
         })
-      } catch (e) {
-        console.log('Error eliminando mensaje:', e)
-      }
+      } catch {}
       return
     }
 
-    // 🔥 REACCIONES
+    // 🔥 REACCIONES (VS)
     await handleReaccion(sock, msg, from)
 
     let metadata = null
@@ -120,7 +131,9 @@ export async function startMessageHandler(sock) {
     if (!text || !text.startsWith('.')) return
 
     const args = text.slice(1).trim().split(/ +/)
-    const commandName = args.shift().toLowerCase()
+    const commandName = args.shift()?.toLowerCase()
+
+    if (!commandName) return
 
     console.log("📩 Comando recibido:", commandName)
 
