@@ -10,7 +10,7 @@ global.muted = global.muted || {}
 const processedMessages = new Set()
 
 const commands = new Map()
-
+//
 const loadCommands = async () => {
   const files = fs.readdirSync('./src/commands')
 
