@@ -1,213 +1,176 @@
-import makeWASocket, {
-  fetchLatestBaileysVersion,
-  DisconnectReason
-} from '@whiskeysockets/baileys'
-
-import qrTerm from 'qrcode-terminal'
-import { useMongoAuthState } from '../mongoAuth.js'
-import Session from '../models/session.js'
-
 import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import { antiLink } from '../events/antiLink.js'
+import { modoAdmin } from '../events/modoadmin.js'
+import { handleReaccion } from '../commands/vs.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+// 🔇 SISTEMA MUTE GLOBAL
+global.muted = global.muted || {}
 
-// 🧠 evitar duplicados
-const processedMessages = new Set()
+const commands = new Map()
 
-// ===============================
-// 🔥 LOADER
-// ===============================
-async function loadCommands() {
-  const commands = new Map()
-  const reactions = []
-
-  const dir = path.join(__dirname, '../commands')
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
+const loadCommands = async () => {
+  const files = fs.readdirSync('./src/commands')
 
   for (const file of files) {
     try {
-      const mod = await import(`../commands/${file}`)
-      const cmd = mod.default || mod
+      const cmd = await import(`../commands/${file}`)
 
-      // comandos
-      if (cmd.name) {
-        let names = cmd.name
-        if (!Array.isArray(names)) names = [names]
+      if (!cmd.default || !cmd.default.name) continue
 
-        for (let n of names) {
-          n = String(n).toLowerCase().trim()
-          commands.set(n, cmd)
-          console.log(`✅ Comando cargado: ${n}`)
+      if (Array.isArray(cmd.default.name)) {
+        for (const name of cmd.default.name) {
+          commands.set(name, cmd.default)
+          console.log(`✅ Comando cargado: ${name}`)
         }
-      }
-
-      // 🔥 reacciones (vs.js)
-      if (mod.handleReaccion) {
-        reactions.push(mod.handleReaccion)
-        console.log(`⚡ Handler reacción: ${file}`)
+      } else {
+        commands.set(cmd.default.name, cmd.default)
+        console.log(`✅ Comando cargado: ${cmd.default.name}`)
       }
 
     } catch (err) {
-      console.log(`❌ Error cargando ${file}`, err)
+      console.log(`❌ Error cargando ${file}:`, err.message)
     }
   }
-
-  return { commands, reactions }
 }
 
-// ===============================
-// 🚀 SOCKET
-// ===============================
-let reconnecting = false
+export async function startMessageHandler(sock) {
 
-export async function startSocket() {
+  console.log('🧠 Handler ULTRA PRO cargado')
+  await loadCommands()
 
-  const { state, saveCreds } = await useMongoAuthState()
-  const { version } = await fetchLatestBaileysVersion()
-
-  const { commands, reactions } = await loadCommands()
-
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: false
-  })
-
-  sock.ev.on('creds.update', saveCreds)
-
-  // ===============================
-  // 📩 MENSAJES
-  // ===============================
   sock.ev.on('messages.upsert', async ({ messages }) => {
-    try {
-      const msg = messages?.[0]
-      if (!msg?.message) return
-      if (msg.key.fromMe) return
-      if (msg.key.remoteJid === 'status@broadcast') return
+    if (!messages?.length) return
 
-      const msgId = msg.key.id
+    const msg = messages[0]
+    if (!msg.message || msg.key.fromMe) return
 
-      // 🔥 ANTI DUPLICADOS
-      if (processedMessages.has(msgId)) return
-      processedMessages.add(msgId)
-
-      setTimeout(() => {
-        processedMessages.delete(msgId)
-      }, 5000)
-
-      const from = msg.key.remoteJid
-
-      // ===============================
-      // 🔥 REACCIONES (VS)
-      // ===============================
-      for (const handler of reactions) {
-        try {
-          await handler(sock, msg, from)
-        } catch {}
-      }
-
-      // ===============================
-      // 🧠 TEXTO
-      // ===============================
-      const text =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        msg.message.imageMessage?.caption ||
-        msg.message.videoMessage?.caption ||
+    const getText = (msg) => {
+      const m = msg.message
+      return (
+        m.conversation ||
+        m.extendedTextMessage?.text ||
+        m.imageMessage?.caption ||
+        m.videoMessage?.caption ||
+        m?.ephemeralMessage?.message?.conversation ||
+        m?.ephemeralMessage?.message?.extendedTextMessage?.text ||
         ''
+      )
+    }
 
-      if (!text) return
+    const text = getText(msg)
+    const from = msg.key.remoteJid
+    const isGroup = from.endsWith('@g.us')
+    const sender = msg.key.participant || msg.key.remoteJid
 
-      const body = text.trim()
+    const clean = (jid) => jid?.split('@')[0]
 
-      const prefixes = ['.', '!', '/']
-      const prefix = prefixes.find(p => body.startsWith(p))
-      if (!prefix) return
+    // 🔇 BLOQUEO DE MUTEADOS
+    if (isGroup && global.muted[from]?.includes(sender)) {
+      try {
+        await sock.sendMessage(from, {
+          delete: {
+            remoteJid: from,
+            fromMe: false,
+            id: msg.key.id,
+            participant: sender
+          }
+        })
+      } catch (e) {
+        console.log('Error eliminando mensaje:', e)
+      }
+      return
+    }
 
-      const withoutPrefix = body.slice(prefix.length).trim()
-      const args = withoutPrefix.split(/ +/)
-      const cmdName = args.shift()?.toLowerCase()
+    // 🔥 REACCIONES
+    await handleReaccion(sock, msg, from)
 
-      if (!cmdName) return
+    let metadata = null
+    let participants = []
+    let isAdmin = false
+    let isBotAdmin = false
+    let isOwner = false
 
-      const command = commands.get(cmdName)
-      if (!command) return
+    if (isGroup) {
+      metadata = await sock.groupMetadata(from)
+      participants = metadata.participants
 
-      console.log(`⚡ comando: ${cmdName}`)
+      const senderData = participants.find(p => clean(p.id) === clean(sender))
+      const botData = participants.find(p => clean(p.id) === clean(sock.user.id))
 
-      const sender = msg.key.participant || msg.key.remoteJid
+      isAdmin =
+        senderData?.admin === 'admin' ||
+        senderData?.admin === 'superadmin'
 
-      const context = {
+      isBotAdmin =
+        botData?.admin === 'admin' ||
+        botData?.admin === 'superadmin'
+    }
+
+    // 👑 OWNER
+    const owners = ['573001234567']
+    isOwner = owners.includes(clean(sender))
+
+    // 🔥 EVENTOS
+    if (isGroup) {
+      await antiLink(sock, msg, text, from)
+      const stop = await modoAdmin(sock, msg, text, from)
+      if (stop) return
+    }
+
+    if (!text || !text.startsWith('.')) return
+
+    const args = text.slice(1).trim().split(/ +/)
+    const commandName = args.shift().toLowerCase()
+
+    console.log("📩 Comando recibido:", commandName)
+
+    const command = commands.get(commandName)
+    if (!command) return
+
+    const reply = (txt, mentions = []) =>
+      sock.sendMessage(from, {
+        text: txt,
+        mentions
+      }, { quoted: msg })
+
+    // 🔒 VALIDACIONES
+    if (command.groupOnly && !isGroup) {
+      return reply('❌ Solo en grupos.')
+    }
+
+    if (command.adminOnly && !isAdmin) {
+      return reply('❌ Solo admins.')
+    }
+
+    if (command.botAdmin && !isBotAdmin) {
+      return reply('❌ El bot necesita admin.')
+    }
+
+    if (command.ownerOnly && !isOwner) {
+      return reply('❌ Solo el owner.')
+    }
+
+    try {
+      await command.execute({
         sock,
-        msg,
         from,
         args,
+        msg,
+        text,
+        command: commandName,
+        isGroup,
+        isAdmin,
+        isBotAdmin,
+        isOwner,
+        participants,
+        metadata,
         sender,
-        command: cmdName,
-
-        reply: (text) =>
-          sock.sendMessage(from, { text }, { quoted: msg }),
-
-        react: (emoji) =>
-          sock.sendMessage(from, {
-            react: { text: emoji, key: msg.key }
-          })
-      }
-
-      // 🔥 EJECUCIÓN CORRECTA
-      if (typeof command.execute === 'function') {
-        await command.execute(context)
-      } else if (typeof command === 'function') {
-        await command(context)
-      }
-
+        reply
+      })
     } catch (err) {
-      console.log('❌ Error handler:', err)
+      console.error(`❌ Error en ${commandName}:`, err)
+      reply('❌ Error al ejecutar el comando.')
     }
+
   })
-
-  // ===============================
-  // 🔌 CONEXIÓN
-  // ===============================
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update
-
-    if (qr) {
-      console.log('📲 Escanea QR:')
-      qrTerm.generate(qr, { small: true })
-    }
-
-    if (connection === 'open') {
-      console.log('✅ CONECTADO')
-      reconnecting = false
-    }
-
-    if (connection === 'close') {
-      const code = lastDisconnect?.error?.output?.statusCode
-      console.log('❌ Conexión cerrada:', code)
-
-      // 🔥 sesión rota
-      if (code === 401) {
-        await Session.deleteOne({ _id: 'auth' })
-        console.log('🧹 sesión eliminada')
-        return startSocket()
-      }
-
-      // 🚫 conflicto
-      if (code === 440) {
-        console.log('🚫 otra sesión activa')
-        return
-      }
-
-      if (reconnecting) return
-      reconnecting = true
-
-      setTimeout(() => startSocket(), 3000)
-    }
-  })
-
-  return sock
 }
