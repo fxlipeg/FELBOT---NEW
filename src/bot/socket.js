@@ -13,7 +13,9 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 🔥 CARGAR COMANDOS
+// ===============================
+// 🔥 CARGADOR DE COMANDOS (PRO)
+// ===============================
 async function loadCommands() {
   const commands = new Map()
   const dir = path.join(__dirname, '../commands')
@@ -23,14 +25,22 @@ async function loadCommands() {
   for (const file of files) {
     try {
       const mod = await import(`../commands/${file}`)
+      const cmd = mod.default || mod
 
-      const name =
-        (mod.name || mod.default?.name || file.replace('.js', '')).toLowerCase()
+      const execute = cmd.execute || cmd
+      if (typeof execute !== 'function') continue
 
-      const execute = mod.execute || mod.default?.execute || mod.default
+      let names = cmd.name || file.replace('.js', '')
 
-      if (typeof execute === 'function') {
-        commands.set(name, execute)
+      // 🔥 soporta alias (array)
+      if (Array.isArray(names)) {
+        for (const n of names) {
+          commands.set(n.toLowerCase(), execute)
+          console.log(`✅ Comando cargado: ${n}`)
+        }
+      } else {
+        commands.set(names.toLowerCase(), execute)
+        console.log(`✅ Comando cargado: ${names}`)
       }
 
     } catch (err) {
@@ -41,6 +51,9 @@ async function loadCommands() {
   return commands
 }
 
+// ===============================
+// 🚀 SOCKET PRINCIPAL
+// ===============================
 export async function startSocket() {
 
   const { state, saveCreds } = await useMongoAuthState()
@@ -58,7 +71,9 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // ===============================
   // 🧠 HANDLER DE MENSAJES
+  // ===============================
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0]
@@ -80,7 +95,7 @@ export async function startSocket() {
 
       const body = text.trim()
 
-      // 👉 prefijos
+      // 🔥 PREFIJOS
       const prefixes = ['.', '!', '/']
       const prefix = prefixes.find(p => body.startsWith(p))
       if (!prefix) return
@@ -96,7 +111,9 @@ export async function startSocket() {
 
       console.log(`⚡ comando: ${cmd}`)
 
-      // 🔥 CONTEXTO UNIVERSAL
+      // ===============================
+      // 🧠 CONTEXTO UNIVERSAL
+      // ===============================
       const context = {
         sock,
         msg,
@@ -121,7 +138,9 @@ export async function startSocket() {
     }
   })
 
+  // ===============================
   // 🔌 CONEXIÓN
+  // ===============================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -142,7 +161,7 @@ export async function startSocket() {
       const shouldReconnect = code !== DisconnectReason.loggedOut
 
       if (shouldReconnect) {
-        console.log('🔄 Reintentando conexión...')
+        console.log('🔄 Reconectando...')
         startSocket()
       } else {
         console.log('🚫 Sesión inválida, vuelve a escanear QR')
