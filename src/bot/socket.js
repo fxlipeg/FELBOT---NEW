@@ -5,6 +5,7 @@ import makeWASocket, {
 
 import qrTerm from 'qrcode-terminal'
 import { useMongoAuthState } from '../mongoAuth.js'
+import Session from '../models/session.js'
 
 import fs from 'fs'
 import path from 'path'
@@ -62,7 +63,6 @@ export async function startSocket() {
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
-
   const commands = await loadCommands()
 
   const sock = makeWASocket({
@@ -100,7 +100,7 @@ export async function startSocket() {
       const body = text.trim()
 
       const prefixes = ['.', '!', '/']
-      const prefix = prefixes.find(p => body.startsWith(p))
+      const prefix = prefixes.find(p => body.startsWith(prefix))
       if (!prefix) return
 
       const withoutPrefix = body.slice(prefix.length).trim()
@@ -140,7 +140,7 @@ export async function startSocket() {
   })
 
   // ===============================
-  // 🔌 CONEXIÓN (ANTI LOOP)
+  // 🔌 CONEXIÓN (ANTI LOOP + FIX QR)
   // ===============================
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
@@ -160,27 +160,34 @@ export async function startSocket() {
 
       console.log('❌ Conexión cerrada:', code)
 
-      // 🚫 NO REINTENTAR (CLAVE)
-      if (code === 440) {
-        console.log('🚫 Sesión reemplazada (conflict)')
-        reconnecting = false
+      // 💣 SESIÓN ROTA → BORRAR Y REGENERAR QR
+      if (code === 401) {
+        console.log('🧹 Eliminando sesión corrupta...')
+        await Session.deleteOne({ _id: 'auth' })
+
+        console.log('🔄 Reiniciando para QR...')
+        setTimeout(() => startSocket(), 2000)
         return
       }
 
+      // 🚫 conflicto
+      if (code === 440) {
+        console.log('🚫 Sesión reemplazada (conflict)')
+        return
+      }
+
+      // 🚫 logout manual
       if (code === DisconnectReason.loggedOut) {
         console.log('🚫 Sesión cerrada → necesitas QR')
-        reconnecting = false
         return
       }
 
       if (reconnecting) return
       reconnecting = true
 
-      console.log('🔄 Reconectando en 3s...')
+      console.log('🔄 Reconectando...')
 
-      setTimeout(() => {
-        startSocket()
-      }, 3000)
+      setTimeout(() => startSocket(), 3000)
     }
   })
 

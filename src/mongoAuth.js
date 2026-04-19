@@ -7,9 +7,8 @@ export const useMongoAuthState = async () => {
 
   let creds, keys = {}
 
-  // 🧠 SI NO HAY SESIÓN → CREAR NUEVA Y GUARDARLA
   if (!session) {
-    console.log('📲 No hay sesión en Mongo → creando nueva (QR)')
+    console.log('📲 Nueva sesión → QR requerido')
 
     creds = initAuthCreds()
     keys = {}
