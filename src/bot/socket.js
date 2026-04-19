@@ -8,38 +8,41 @@ import { useMongoAuthState } from '../mongoAuth.js'
 import Session from '../models/session.js'
 import { startMessageHandler } from '../handlers/messageHandler.js'
 
-// 🔥 SINGLETON GLOBAL
+// 🔥 CONTROL GLOBAL
 let sock = null
-let starting = false
+let isStarting = false
+let isConnected = false
 
 export async function startSocket() {
 
-  // 🛑 evitar múltiples sockets
-  if (sock) {
-    console.log('⚠️ Socket ya activo')
+  // 🛑 evitar duplicados
+  if (sock && isConnected) {
+    console.log('🟢 Socket ya activo, no se crea otro')
     return sock
   }
 
-  if (starting) {
+  if (isStarting) {
     console.log('⏳ Socket en proceso...')
     return
   }
 
-  starting = true
+  isStarting = true
 
   const { state, saveCreds } = await useMongoAuthState()
   const { version } = await fetchLatestBaileysVersion()
 
-  sock = makeWASocket({
+  const newSock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
     markOnlineOnConnect: false
   })
 
-  sock.ev.on('creds.update', saveCreds)
+  sock = newSock
 
-  sock.ev.on('connection.update', async (update) => {
+  newSock.ev.on('creds.update', saveCreds)
+
+  newSock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
@@ -50,10 +53,10 @@ export async function startSocket() {
     if (connection === 'open') {
       console.log('✅ CONECTADO')
 
-      // 🔥 handler SOLO UNA VEZ
-      await startMessageHandler(sock)
+      isConnected = true
+      isStarting = false
 
-      starting = false
+      await startMessageHandler(newSock)
     }
 
     if (connection === 'close') {
@@ -61,30 +64,44 @@ export async function startSocket() {
 
       console.log('❌ Conexión cerrada:', code)
 
-      // 🔴 SESIÓN INVALIDA → NUEVO QR
+      isConnected = false
+
+      // 🔴 SESIÓN INVÁLIDA
       if (code === 401) {
+        console.log('🧹 sesión inválida → borrando auth')
+
         await Session.deleteOne({ _id: 'auth' })
-        console.log('🧹 sesión eliminada → nuevo QR')
+
         sock = null
-        starting = false
-        return startSocket()
+        isStarting = false
+
+        return setTimeout(() => startSocket(), 3000)
       }
 
-    if (code === 440) {
-  console.log('⚠️ conflicto → reiniciando socket limpio')
+      // 🟡 CONFLICT (NO BUCLE)
+      if (code === 440) {
+        console.log('⚠️ conflicto detectado')
 
-  sock.ev.removeAllListeners() // 💥 clave
-  sock = null
-  starting = false
+        // esperar a ver si hay socket vivo
+        setTimeout(() => {
+          if (!sock || !isConnected) {
+            console.log('🔄 no hay socket activo → reconectando')
+            sock = null
+            isStarting = false
+            startSocket()
+          } else {
+            console.log('🟢 otro socket ya está activo, no hago nada')
+          }
+        }, 8000)
 
-  setTimeout(() => startSocket(), 3000)
-  return
-}
+        return
+      }
 
-      // 🔁 reconexión normal
-      console.log('🔄 reconectando...')
+      // 🔁 RECONEXIÓN NORMAL
+      console.log('🔄 reconexión normal...')
+
       sock = null
-      starting = false
+      isStarting = false
 
       setTimeout(() => startSocket(), 5000)
     }
