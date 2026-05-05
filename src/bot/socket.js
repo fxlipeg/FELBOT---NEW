@@ -8,18 +8,17 @@ import { startMessageHandler } from '../handlers/messageHandler.js'
 
 let sock = null
 let isConnecting = false
-let pairingRequested = false // 🔒 evita spam de códigos
+let waitingForPairing = false // 🔥 clave
 
 export async function startSocket() {
 
-  // 🚫 EVITA MULTI INSTANCIAS
   if (isConnecting) {
-    console.log('⚠️ Ya se está conectando, evitando duplicado...')
+    console.log('⚠️ Ya se está conectando...')
     return
   }
 
   if (sock) {
-    console.log('⚠️ Ya existe un socket activo')
+    console.log('⚠️ Socket ya existe')
     return
   }
 
@@ -34,15 +33,14 @@ export async function startSocket() {
     browser: ['Ubuntu', 'Chrome', '20.0.04']
   })
 
-  // 💾 GUARDAR SESIÓN
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update
 
-    // 🔑 GENERAR / REGENERAR PAIRING CODE
-    if (connection === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
-      pairingRequested = true
+    // 🔑 GENERAR CÓDIGO SOLO UNA VEZ Y EN EL MOMENTO CORRECTO
+    if (!sock.authState.creds.registered && !waitingForPairing) {
+      waitingForPairing = true
 
       try {
         const numero = '212693891790'
@@ -52,25 +50,18 @@ export async function startSocket() {
         console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
         console.log(code)
         console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
+        console.log('⏳ Esperando que ingreses el código...')
 
       } catch (err) {
         console.error('❌ Error generando código:', err.message)
-
-        // 🔄 reintento automático
-        pairingRequested = false
-        setTimeout(() => {
-          console.log('🔄 Reintentando generar código...')
-          startSocket()
-        }, 4000)
       }
     }
 
     if (connection === 'open') {
       console.log('✅ CONECTADO')
       isConnecting = false
-      pairingRequested = false
+      waitingForPairing = false
 
-      // 🧠 SOLO UNA VEZ
       startMessageHandler(sock)
     }
 
@@ -81,22 +72,24 @@ export async function startSocket() {
 
       sock = null
       isConnecting = false
-      pairingRequested = false
 
-      // 🚫 NO RECONEXIÓN EN CONFLICTO
+      // 🔥 SI ESTÁS EN LOGIN → NO REINICIAR
+      if (waitingForPairing) {
+        console.log('⏳ Esperando login, NO reconectar...')
+        return
+      }
+
       if (statusCode === 440) {
         console.log('🚫 conflicto → NO reconectar')
         return
       }
 
-      // 🔁 SESIÓN INVÁLIDA → FORZAR NUEVO CÓDIGO
       if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-        console.log('🔑 sesión inválida → generando nuevo código...')
-        setTimeout(() => startSocket(), 4000)
+        console.log('🔑 sesión inválida → reinicia para nuevo código')
+        waitingForPairing = false
         return
       }
 
-      // 🔄 RECONEXIÓN NORMAL
       console.log('🔄 Reconectando en 5s...')
       setTimeout(() => startSocket(), 5000)
     }
