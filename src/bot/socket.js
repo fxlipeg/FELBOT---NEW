@@ -8,6 +8,7 @@ import { startMessageHandler } from '../handlers/messageHandler.js'
 
 let sock = null
 let isConnecting = false
+let pairingRequested = false // 🔒 evita spam de códigos
 
 export async function startSocket() {
 
@@ -33,30 +34,41 @@ export async function startSocket() {
     browser: ['Ubuntu', 'Chrome', '20.0.04']
   })
 
-  // 🔑 PAIRING CODE (reemplaza QR)
-  if (!sock.authState.creds.registered) {
-    const numero = '212693891790' // 👈 tu número sin + ni espacios
-
-    try {
-      const code = await sock.requestPairingCode(numero)
-
-      console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
-      console.log(code)
-      console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
-    } catch (err) {
-      console.error('❌ Error generando código:', err)
-    }
-  }
-
   // 💾 GUARDAR SESIÓN
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update
 
+    // 🔑 GENERAR / REGENERAR PAIRING CODE
+    if (connection === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
+      pairingRequested = true
+
+      try {
+        const numero = '212693891790'
+
+        const code = await sock.requestPairingCode(numero)
+
+        console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
+        console.log(code)
+        console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
+
+      } catch (err) {
+        console.error('❌ Error generando código:', err.message)
+
+        // 🔄 reintento automático
+        pairingRequested = false
+        setTimeout(() => {
+          console.log('🔄 Reintentando generar código...')
+          startSocket()
+        }, 4000)
+      }
+    }
+
     if (connection === 'open') {
       console.log('✅ CONECTADO')
       isConnecting = false
+      pairingRequested = false
 
       // 🧠 SOLO UNA VEZ
       startMessageHandler(sock)
@@ -69,6 +81,7 @@ export async function startSocket() {
 
       sock = null
       isConnecting = false
+      pairingRequested = false
 
       // 🚫 NO RECONEXIÓN EN CONFLICTO
       if (statusCode === 440) {
@@ -76,12 +89,14 @@ export async function startSocket() {
         return
       }
 
-      if (statusCode === DisconnectReason.loggedOut) {
-        console.log('🚫 sesión cerrada → usa pairing code')
+      // 🔁 SESIÓN INVÁLIDA → FORZAR NUEVO CÓDIGO
+      if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+        console.log('🔑 sesión inválida → generando nuevo código...')
+        setTimeout(() => startSocket(), 4000)
         return
       }
 
-      // ✅ RECONEXIÓN CONTROLADA
+      // 🔄 RECONEXIÓN NORMAL
       console.log('🔄 Reconectando en 5s...')
       setTimeout(() => startSocket(), 5000)
     }
