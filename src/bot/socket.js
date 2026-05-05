@@ -8,7 +8,7 @@ import { startMessageHandler } from '../handlers/messageHandler.js'
 
 let sock = null
 let isConnecting = false
-let waitingForPairing = false // 🔥 clave
+let loginMode = false // 🔥 clave real
 
 export async function startSocket() {
 
@@ -35,32 +35,31 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // 🔑 GENERAR CÓDIGO SOLO UNA VEZ
+  if (!sock.authState.creds.registered) {
+    loginMode = true
+
+    try {
+      const numero = '212693891790'
+      const code = await sock.requestPairingCode(numero)
+
+      console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
+      console.log(code)
+      console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
+      console.log('⏳ ESPERANDO QUE INGRESES EL CÓDIGO... (NO SE REINICIA)')
+
+    } catch (err) {
+      console.error('❌ Error generando código:', err.message)
+    }
+  }
+
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update
-
-    // 🔑 GENERAR CÓDIGO SOLO UNA VEZ Y EN EL MOMENTO CORRECTO
-    if (!sock.authState.creds.registered && !waitingForPairing) {
-      waitingForPairing = true
-
-      try {
-        const numero = '212693891790'
-
-        const code = await sock.requestPairingCode(numero)
-
-        console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
-        console.log(code)
-        console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
-        console.log('⏳ Esperando que ingreses el código...')
-
-      } catch (err) {
-        console.error('❌ Error generando código:', err.message)
-      }
-    }
 
     if (connection === 'open') {
       console.log('✅ CONECTADO')
       isConnecting = false
-      waitingForPairing = false
+      loginMode = false
 
       startMessageHandler(sock)
     }
@@ -73,9 +72,9 @@ export async function startSocket() {
       sock = null
       isConnecting = false
 
-      // 🔥 SI ESTÁS EN LOGIN → NO REINICIAR
-      if (waitingForPairing) {
-        console.log('⏳ Esperando login, NO reconectar...')
+      // 💥 CLAVE: SI ESTÁS EN LOGIN → NO HACER NADA
+      if (loginMode) {
+        console.log('⏳ En modo login → NO reconectar, espera el código')
         return
       }
 
@@ -85,8 +84,7 @@ export async function startSocket() {
       }
 
       if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-        console.log('🔑 sesión inválida → reinicia para nuevo código')
-        waitingForPairing = false
+        console.log('🔑 sesión inválida → borra auth y reinicia')
         return
       }
 
