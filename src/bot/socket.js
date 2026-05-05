@@ -30,10 +30,25 @@ export async function startSocket() {
   sock = makeWASocket({
     version,
     auth: state,
-    printQRInTerminal: true,
     browser: ['Ubuntu', 'Chrome', '20.0.04']
   })
 
+  // 🔑 PAIRING CODE (reemplaza QR)
+  if (!sock.authState.creds.registered) {
+    const numero = '212693891790' // 👈 tu número sin + ni espacios
+
+    try {
+      const code = await sock.requestPairingCode(numero)
+
+      console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
+      console.log(code)
+      console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
+    } catch (err) {
+      console.error('❌ Error generando código:', err)
+    }
+  }
+
+  // 💾 GUARDAR SESIÓN
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', async (update) => {
@@ -62,7 +77,7 @@ export async function startSocket() {
       }
 
       if (statusCode === DisconnectReason.loggedOut) {
-        console.log('🚫 sesión cerrada → escanea QR')
+        console.log('🚫 sesión cerrada → usa pairing code')
         return
       }
 
