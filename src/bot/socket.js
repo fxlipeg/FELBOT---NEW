@@ -5,10 +5,10 @@ import makeWASocket, {
 
 import { useMongoAuthState } from '../mongoAuth.js'
 import { startMessageHandler } from '../handlers/messageHandler.js'
+import qrcode from 'qrcode-terminal'
 
 let sock = null
 let isConnecting = false
-let loginMode = false // 🔥 clave real
 
 export async function startSocket() {
 
@@ -35,31 +35,18 @@ export async function startSocket() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // 🔑 GENERAR CÓDIGO SOLO UNA VEZ
-  if (!sock.authState.creds.registered) {
-    loginMode = true
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update
 
-    try {
-      const numero = '212693891790'
-      const code = await sock.requestPairingCode(numero)
-
-      console.log('\n🔑 CÓDIGO DE VINCULACIÓN:')
-      console.log(code)
-      console.log('📱 WhatsApp > Dispositivos vinculados > Ingresar código\n')
-      console.log('⏳ ESPERANDO QUE INGRESES EL CÓDIGO... (NO SE REINICIA)')
-
-    } catch (err) {
-      console.error('❌ Error generando código:', err.message)
+    // 🔥 MOSTRAR QR
+    if (qr) {
+      console.log('\n📱 ESCANEA ESTE QR:\n')
+      qrcode.generate(qr, { small: true })
     }
-  }
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update
 
     if (connection === 'open') {
       console.log('✅ CONECTADO')
       isConnecting = false
-      loginMode = false
 
       startMessageHandler(sock)
     }
@@ -72,19 +59,13 @@ export async function startSocket() {
       sock = null
       isConnecting = false
 
-      // 💥 CLAVE: SI ESTÁS EN LOGIN → NO HACER NADA
-      if (loginMode) {
-        console.log('⏳ En modo login → NO reconectar, espera el código')
-        return
-      }
-
       if (statusCode === 440) {
         console.log('🚫 conflicto → NO reconectar')
         return
       }
 
-      if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-        console.log('🔑 sesión inválida → borra auth y reinicia')
+      if (statusCode === DisconnectReason.loggedOut) {
+        console.log('🚫 sesión cerrada → vuelve a escanear QR')
         return
       }
 
