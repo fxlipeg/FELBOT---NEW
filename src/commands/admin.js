@@ -10,7 +10,7 @@ export default {
 
     if (mentionedJid.length === 0) {
       return reply(
-`❗ Debes mencionar a un usuario
+`❗ Debes mencionar a un usuario.
 
 Ejemplo:
 .admin @usuario`
