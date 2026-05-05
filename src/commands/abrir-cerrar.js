@@ -28,7 +28,8 @@ export default {
 ═══════════════════════
 📛 ${groupName}
 
-💬 El chat ha sido habilitado
+
+chat ha sido habilitado
 para todos los miembros.
 `
 
